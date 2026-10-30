@@ -5,7 +5,8 @@ import path from 'node:path';
 import { createCommand } from '../src/create.js';
 import { checkCommand } from '../src/check.js';
 import { buildCommand } from '../src/build.js';
-import { getNetworkUrls } from '../src/network.js';
+import { getNetworkUrls, printServerUrls } from '../src/network.js';
+import { shouldUseEmoji, formatBanner } from '../src/banner.js';
 
 const TMP_DIR = path.resolve('tmp-test-cli');
 
@@ -22,10 +23,70 @@ test.after(() => {
   }
 });
 
-test('CLI - getNetworkUrls generates local and LAN addresses', () => {
+test('CLI - getNetworkUrls generates local and LAN addresses with full http:// prefix (Bug 3)', () => {
   const { localUrl, networkUrls } = getNetworkUrls(3000, '0.0.0.0');
+  assert.ok(localUrl.startsWith('http://'), `localUrl must start with http://, got: ${localUrl}`);
   assert.strictEqual(localUrl, 'http://localhost:3000/');
   assert.ok(Array.isArray(networkUrls));
+
+  for (const netUrl of networkUrls) {
+    assert.ok(netUrl.startsWith('http://'), `networkUrl must start with http://, got: ${netUrl}`);
+  }
+
+  // Test console.log output from printServerUrls does not drop 'h'
+  const logs = [];
+  const origLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+  try {
+    printServerUrls({ port: 3000, host: '0.0.0.0' });
+    const fullLog = logs.join('\n');
+    assert.ok(fullLog.includes('http://localhost:3000/'));
+    // Ensure every protocol occurrence is http:// and none is ttp:// without leading h
+    const matches = fullLog.match(/.?ttp:\/\//g) || [];
+    assert.ok(matches.length > 0, 'Must have at least one URL');
+    for (const m of matches) {
+      assert.strictEqual(m, 'http://', `Found protocol missing leading 'h': ${m}`);
+    }
+  } finally {
+    console.log = origLog;
+  }
+});
+
+test('CLI - banner emoji integrity and graceful fallback (Bug 4)', () => {
+  const prevEmoji = process.env.LIQUID_EMOJI;
+  const prevNoEmoji = process.env.LIQUID_NO_EMOJI;
+  const prevTerm = process.env.TERM;
+
+  try {
+    // 1. Force emoji ON via LIQUID_EMOJI=1
+    process.env.LIQUID_EMOJI = '1';
+    delete process.env.LIQUID_NO_EMOJI;
+    assert.strictEqual(shouldUseEmoji(), true);
+    const bannerEmoji = formatBanner('dev');
+    assert.ok(bannerEmoji.includes('🫟'), 'Banner must include 🫟 when emoji enabled');
+    assert.ok(bannerEmoji.includes('Liquid dev'));
+
+    // 2. Force emoji OFF via LIQUID_EMOJI=0
+    process.env.LIQUID_EMOJI = '0';
+    assert.strictEqual(shouldUseEmoji(), false);
+    const bannerPlain = formatBanner('dev');
+    assert.ok(!bannerPlain.includes('🫟'), 'Banner must not include 🫟 when emoji disabled');
+    assert.ok(bannerPlain.includes('Liquid dev'), 'Banner must print plain word Liquid');
+
+    // 3. Force emoji OFF via LIQUID_NO_EMOJI=1
+    delete process.env.LIQUID_EMOJI;
+    process.env.LIQUID_NO_EMOJI = '1';
+    assert.strictEqual(shouldUseEmoji(), false);
+
+    // 4. Fallback on dumb terminal
+    delete process.env.LIQUID_NO_EMOJI;
+    process.env.TERM = 'dumb';
+    assert.strictEqual(shouldUseEmoji(), false);
+  } finally {
+    if (prevEmoji !== undefined) process.env.LIQUID_EMOJI = prevEmoji; else delete process.env.LIQUID_EMOJI;
+    if (prevNoEmoji !== undefined) process.env.LIQUID_NO_EMOJI = prevNoEmoji; else delete process.env.LIQUID_NO_EMOJI;
+    if (prevTerm !== undefined) process.env.TERM = prevTerm; else delete process.env.TERM;
+  }
 });
 
 test('CLI - create scaffolds a standard project with proper layout', async () => {

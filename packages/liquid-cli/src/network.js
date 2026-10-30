@@ -31,7 +31,7 @@ export function printServerUrls({ port, host, protocol = 'http' }) {
   const { localUrl, networkUrls } = getNetworkUrls(port, host);
   console.log(`  \x1b[32m➜\x1b[0m  \x1b[1mLocal:\x1b[0m   \x1b[36m${localUrl}\x1b[0m`);
   for (const netUrl of networkUrls) {
-    console.log(`  \x1b[32m➜\x1b[0m  \x1b[1mNetwork:\x1b[0m \x1b[36${netUrl}\x1b[0m`);
+    console.log(`  \x1b[32m➜\x1b[0m  \x1b[1mNetwork:\x1b[0m \x1b[36m${netUrl}\x1b[0m`);
   }
   console.log('');
 }

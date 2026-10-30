@@ -113,3 +113,27 @@ This document records every non-trivial decision made in the design and implemen
 ## 13. Watcher Resource Teardown
 - **Decision**: `devCommand` returns the HTTP server with an automatic `close` event listener that explicitly closes the file system watcher (`fs.watch`) and closes all active Server-Sent Events (SSE) connections.
 - **Rationale**: Prevents hanging background processes and dangling file descriptors during testing and dev server restarts.
+
+---
+
+## 14. Dev Server Module Resolution & Browser Execution Guardrails
+- **Decision**: Implement dual module resolution combining native browser `<script type="importmap">` injection in `index.html` with server-side import rewriting to fully qualified paths (`/@modules/<pkg>/src/...`). In addition, rewrite all relative imports within served modules to absolute `/@modules/<pkg>/...` paths.
+- **Rationale**: Browsers reject bare specifiers in native ESM mode. Furthermore, when modules are fetched under extensionless URLs (e.g. `/@modules/liquid-runtime`), relative imports (such as `./signals.js`) are resolved by browsers against the root directory (`/@modules/signals.js` -> 404) rather than the package subpath. Rewriting to fully qualified URLs prevents 404 failures and module graph execution aborts across all browser engines.
+
+---
+
+## 15. In-Browser Runtime Error Overlay & Synchronous Head Injection
+- **Decision**: Inject dev server error handling and mount watchdog via a synchronous plain `<script>` tag in `<head>` rather than a deferred `<script type="module">`. The overlay includes an embedded pure-JS VLQ source-map decoder that maps browser runtime stack traces back to original `.liq` source line numbers and code snippets.
+- **Rationale**: Module scripts are deferred by browsers until document parsing completes. A synchronous `<script>` in `<head>` guarantees that `window.addEventListener('error')` and `window.addEventListener('unhandledrejection')` are active before any application module begins loading, capturing network load failures and module initialization explosions.
+
+---
+
+## 16. Terminal Request Logging & Mount Watchdog
+- **Decision**: Log every HTTP request in the terminal (`[time] [METHOD] [path] [status] [duration_ms]`). If the `#app` container element remains empty for 2 seconds and no error has been raised, display a prominent diagnostic card in the browser suggesting verified fix actions.
+- **Rationale**: Eliminates silent blank-screen failures on mobile devices without devtools, providing instant feedback on both the device screen and the developer terminal.
+
+---
+
+## 17. Banner Emoji UTF-8 Integrity & Graceful Fallback
+- **Decision**: Maintain intact UTF-8 code point U+1FADF (`🫟`, Pouring Liquid) while providing automatic fallback to the plain word `"Liquid"` when `TERM=dumb`, when stdout is non-TTY, or in non-UTF-8 locales. Support manual overrides via `LIQUID_EMOJI=1` (force on) and `LIQUID_EMOJI=0` / `LIQUID_NO_EMOJI=1` (force off).
+- **Rationale**: Unicode 15.0 emojis may render as replacement boxes (``) in older terminal fonts, mobile shells, or CI environments. Graceful degradation preserves clean, legible output in all environments.
