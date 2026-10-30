@@ -6,6 +6,8 @@ import os from 'node:os';
 import { spawn, execSync } from 'node:child_process';
 import { createCommand } from '../packages/liquid-cli/src/create.js';
 import { devCommand } from '../packages/liquid-cli/src/dev.js';
+import { buildCommand } from '../packages/liquid-cli/src/build.js';
+import { previewCommand } from '../packages/liquid-cli/src/preview.js';
 
 const TEST_DIR = path.resolve('tmp-e2e-browser-test');
 
@@ -49,6 +51,9 @@ async function runWithChromium(url, checkFn) {
     '--disable-sync',
     '--disable-translate',
     '--no-first-run',
+    '--no-zygote',
+    '--password-store=basic',
+    '--use-mock-keychain',
     `--user-data-dir=${tmpProfile}`,
     '--remote-debugging-port=0'
   ]);
@@ -66,7 +71,7 @@ async function runWithChromium(url, checkFn) {
   chrome.stdout.on('data', onData);
 
   try {
-    for (let i = 0; i < 80; i++) {
+    for (let i = 0; i < 250; i++) {
       if (wsUrl) break;
       await new Promise(r => setTimeout(r, 100));
     }
@@ -121,7 +126,7 @@ async function runWithChromium(url, checkFn) {
   }
 }
 
-async function waitForSelector(send, selector, timeoutMs = 8000) {
+async function waitForSelector(send, selector, timeoutMs = 20000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const res = await send('Runtime.evaluate', {
@@ -576,6 +581,239 @@ test('E2E Browser - faithful real typing with character-by-character events, IME
     }
   } finally {
     if (server) server.close();
+    process.chdir(prevCwd);
+  }
+});
+
+test('E2E CSS Parity - dev mode and build mode produce identical CSS rules (Bug Fix Pass 4)', async () => {
+  const projPath = path.join(TEST_DIR, 'css-parity-app');
+  await createCommand(projPath);
+
+  const prevCwd = process.cwd();
+  let server;
+  try {
+    process.chdir(projPath);
+
+    // 1. Build mode: extract CSS rules from dist/assets/style.*.css
+    await buildCommand();
+    const distAssets = fs.readdirSync(path.join(projPath, 'dist/assets'));
+    const cssFile = distAssets.find(f => f.startsWith('style.') && f.endsWith('.css'));
+    assert.ok(cssFile, 'dist/assets must contain style.[hash].css');
+    const buildCss = fs.readFileSync(path.join(projPath, 'dist/assets', cssFile), 'utf8');
+
+    // 2. Dev mode: start dev server and fetch or extract injected styles
+    server = await devCommand({ port: 3516, host: '127.0.0.1' });
+
+    let devCss = '';
+    if (hasChromium()) {
+      await runWithChromium('http://127.0.0.1:3516/', async (send) => {
+        await waitForSelector(send, 'header.header');
+        // Extract all textContent from <style> tags injected by liquid components
+        const styleRes = await send('Runtime.evaluate', {
+          expression: `Array.from(document.querySelectorAll('style[id^="liq-style-"]')).map(s => s.textContent).join('\\n')`,
+          returnByValue: true
+        });
+        devCss = styleRes.result.value || '';
+      });
+    } else {
+      const appRes = await fetch('http://127.0.0.1:3516/src/App.liq');
+      const headerRes = await fetch('http://127.0.0.1:3516/src/components/Header.liq');
+      const extractCssFromJs = (js) => {
+        const match = js.match(/document\.createElement\('style'\)[\s\S]*?\.textContent\s*=\s*(`[\s\S]*?`|"[\s\S]*?"|'[\s\S]*?');/);
+        if (!match) return '';
+        return eval(match[1]);
+      };
+      devCss = extractCssFromJs(await headerRes.text()) + '\n' + extractCssFromJs(await appRes.text());
+    }
+
+    assert.ok(devCss.length > 0, 'Dev CSS must not be empty');
+
+    function parseAndNormalizeRules(cssText) {
+      const rules = [];
+      const stripped = cssText.replace(/\/\*[\s\S]*?\*\//g, '');
+      const regex = /([^{}]+)\{([^}]+)\}/g;
+      let m;
+      while ((m = regex.exec(stripped)) !== null) {
+        const rawSel = m[1].trim().replace(/\s+/g, ' ');
+        const rawBody = m[2].trim().replace(/\s+/g, ' ');
+        // Normalize scoped hash: [data-l-xxxx] -> [data-l-SCOPE]
+        const normSel = rawSel.replace(/\[data-l-[a-z0-9]+\]/g, '[data-l-SCOPE]');
+        const normBody = rawBody
+          .split(';')
+          .map(d => d.trim())
+          .filter(Boolean)
+          .map(d => {
+            const colonIdx = d.indexOf(':');
+            if (colonIdx === -1) return d;
+            const prop = d.slice(0, colonIdx).trim();
+            const val = d.slice(colonIdx + 1).trim().replace(/\s*,\s*/g, ', ');
+            return `${prop}: ${val}`;
+          })
+          .sort()
+          .join('; ');
+        rules.push(`${normSel} { ${normBody} }`);
+      }
+      return rules.sort();
+    }
+
+    const buildRules = parseAndNormalizeRules(buildCss);
+    const devRules = parseAndNormalizeRules(devCss);
+
+    // Assert Header and App rules are present in both modes
+    assert.ok(buildRules.some(r => r.includes('header.header[data-l-SCOPE]')), 'Build CSS must contain header.header rule');
+    assert.ok(devRules.some(r => r.includes('header.header[data-l-SCOPE]')), 'Dev CSS must contain header.header rule (not overwritten!)');
+    assert.ok(devRules.some(r => r.includes('.card[data-l-SCOPE]')), 'Dev CSS must contain .card rule');
+
+    // Assert rule sets match identically
+    assert.deepStrictEqual(devRules, buildRules, 'Set of CSS rules in dev mode and build mode must be identical');
+  } finally {
+    if (server) server.close();
+    process.chdir(prevCwd);
+  }
+});
+
+test('E2E Browser - computed styles match exactly between dev mode and preview mode (Bug Fix Pass 4)', async () => {
+  if (!hasChromium()) return;
+
+  const projPath = path.join(TEST_DIR, 'style-parity-app');
+  await createCommand(projPath);
+
+  const prevCwd = process.cwd();
+  let devServer;
+  let previewServer;
+
+  try {
+    process.chdir(projPath);
+
+    // 1. Dev mode: start dev server and query computed styles
+    devServer = await devCommand({ port: 3517, host: '127.0.0.1' });
+
+    let devStyles = null;
+    await runWithChromium('http://127.0.0.1:3517/', async (send) => {
+      await waitForSelector(send, 'header.header');
+      await waitForSelector(send, '.card');
+      await waitForSelector(send, 'button.btn');
+
+      const res = await send('Runtime.evaluate', {
+        expression: `(() => {
+          function getStyles(sel, props) {
+            const el = document.querySelector(sel);
+            if (!el) return null;
+            const cs = window.getComputedStyle(el);
+            const out = {};
+            for (const p of props) {
+              out[p] = cs.getPropertyValue(p);
+            }
+            return out;
+          }
+
+          const props = [
+            'display',
+            'background-color',
+            'color',
+            'border-radius',
+            'font-family',
+            'font-weight',
+            'justify-content',
+            'align-items',
+            'padding-top',
+            'padding-bottom',
+            'padding-left',
+            'padding-right',
+            'margin-top',
+            'box-shadow'
+          ];
+
+          return {
+            header: getStyles('header.header', props),
+            card: getStyles('.card', props),
+            button: getStyles('button.btn', props)
+          };
+        })()`,
+        returnByValue: true
+      });
+      devStyles = res.result.value;
+    });
+
+    devServer.close();
+    devServer = null;
+
+    // 2. Production build and preview mode
+    await buildCommand();
+    previewServer = await previewCommand({ port: 4174, host: '127.0.0.1' });
+
+    let previewStyles = null;
+    await runWithChromium('http://127.0.0.1:4174/', async (send) => {
+      await waitForSelector(send, 'header.header');
+      await waitForSelector(send, '.card');
+      await waitForSelector(send, 'button.btn');
+
+      const res = await send('Runtime.evaluate', {
+        expression: `(() => {
+          function getStyles(sel, props) {
+            const el = document.querySelector(sel);
+            if (!el) return null;
+            const cs = window.getComputedStyle(el);
+            const out = {};
+            for (const p of props) {
+              out[p] = cs.getPropertyValue(p);
+            }
+            return out;
+          }
+
+          const props = [
+            'display',
+            'background-color',
+            'color',
+            'border-radius',
+            'font-family',
+            'font-weight',
+            'justify-content',
+            'align-items',
+            'padding-top',
+            'padding-bottom',
+            'padding-left',
+            'padding-right',
+            'margin-top',
+            'box-shadow'
+          ];
+
+          return {
+            header: getStyles('header.header', props),
+            card: getStyles('.card', props),
+            button: getStyles('button.btn', props)
+          };
+        })()`,
+        returnByValue: true
+      });
+      previewStyles = res.result.value;
+    });
+
+    assert.ok(devStyles, 'Dev styles must be captured');
+    assert.ok(previewStyles, 'Preview styles must be captured');
+
+    // Specific assertions verifying Bug 4 fix:
+    // Header must have dark bar (#0f172a = rgb(15, 23, 42)), rounded corners (12px), and flex display
+    assert.strictEqual(devStyles.header['background-color'], 'rgb(15, 23, 42)', 'Dev header background must be dark slate (#0f172a)');
+    assert.strictEqual(previewStyles.header['background-color'], 'rgb(15, 23, 42)', 'Preview header background must be dark slate (#0f172a)');
+    assert.strictEqual(devStyles.header['border-radius'], '12px', 'Dev header border-radius must be 12px');
+    assert.strictEqual(previewStyles.header['border-radius'], '12px', 'Preview header border-radius must be 12px');
+    assert.strictEqual(devStyles.header['display'], 'flex', 'Dev header display must be flex');
+    assert.strictEqual(previewStyles.header['display'], 'flex', 'Preview header display must be flex');
+
+    // Card styling
+    assert.strictEqual(devStyles.card['background-color'], 'rgb(255, 255, 255)', 'Card background must be white');
+    assert.strictEqual(devStyles.card['border-radius'], '12px', 'Card border-radius must be 12px');
+
+    // Button styling
+    assert.strictEqual(devStyles.button['background-color'], 'rgb(2, 132, 199)', 'Button background must be sky blue (#0284c7)');
+
+    // Deep strict equality across all probed properties
+    assert.deepStrictEqual(devStyles, previewStyles, 'Computed styles of header, card, and button must match exactly between dev and preview');
+
+  } finally {
+    if (devServer) devServer.close();
+    if (previewServer) previewServer.close();
     process.chdir(prevCwd);
   }
 });

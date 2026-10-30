@@ -157,4 +157,15 @@ This document records every non-trivial decision made in the design and implemen
   3. **Cursor Preservation in Property Bindings**: In `bindAttr`, property values (e.g. `el.value`, `el.checked`) are only reassigned when `el[name] !== nextVal`. This prevents redundant DOM mutations that would reset input selection or cursor positions during rapid character typing.
 - **Rationale**: Directives such as `@keydown.enter=addTodo` compile to `listen(el, "keydown", addTodo, ["enter"])`. Without key filtering in `listen`, `addTodo` executed on every single keystroke (`keydown`), creating a todo item per character and clearing the input continuously while typing. Correct modifier filtering and untracked execution ensure handlers fire strictly on their intended events.
 
+---
+
+## 20. Isolated Component Style Injection & Dev/Build CSS Parity
+- **Decision**:
+  1. **Scoped Style Tag Isolation in Dev Server**: `packages/liquid-compiler` now exposes `scopeId` and `scopeAttr` directly on the compile result object (`ast.scopeId`, `ast.scopeAttr`, `result.scopeId`, `result.scopeAttr`). In `packages/liquid-cli/src/dev.js`, every component injects its scoped CSS into an isolated, per-component style tag: `<style id="liq-style-${scopeId}" data-liquid-component="${relPath}">`.
+  2. **Shared CSS Compilation Pipeline**: Both dev mode and build mode share the exact same CSS transformation pipeline (`compile` -> `analyze` -> `transformScopedCSS(ast.styles.content, analysis.scopeAttr)`). Both modes resolve component file paths relative to the project root with POSIX normalization (`src/components/Header.liq`), generating identical `data-l-[hash]` attributes and identical scoped CSS rules in both dev and production bundles.
+  3. **No-Cache Headers in Dev Server**: All dev server HTTP responses (HTML, compiled `.liq`, `.js`, CSS, static assets, and package modules) explicitly send `Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate`, `Pragma: no-cache`, and `Expires: 0`. This eliminates stale style caching across desktop and mobile browsers.
+  4. **Deterministic Asset Ordering**: In `packages/liquid-cli/src/build.js`, file discovery arrays (`liqFiles`, `cssFiles`) are explicitly sorted and relative paths normalized to forward slashes before aggregation to guarantee deterministic bundle hashing and rule ordering across all platforms.
+- **Rationale**: Previously, `compile()` calculated `scopeId` but omitted it from the return object and AST. `dev.js` fell back to `liq-style-${compiled.ast.scopeId || 'default'}`. Because `scopeId` was `undefined`, every single component injected into `<style id="liq-style-default">`, causing parent components (`App.liq`) to overwrite and completely erase imported child components' styles (`Header.liq`). In production `liquid build`, styles were aggregated into a unified stylesheet, creating a severe visual discrepancy between `liquid dev` and `liquid preview`. Isolated style tags, no-cache headers, and shared compilation guarantee 100% computed style parity.
+
+
 

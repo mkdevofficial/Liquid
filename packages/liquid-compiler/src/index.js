@@ -38,11 +38,16 @@ export function compile(source, options = {}) {
   // 5. Code generation
   const genResult = generate(ast, analysis, { file, ...options });
 
+  ast.scopeId = analysis.scopeId;
+  ast.scopeAttr = analysis.scopeAttr;
+
   return {
     code: genResult.code,
     map: genResult.map,
     css: scopedCSS,
     warnings: analysis.warnings,
-    ast
+    ast,
+    scopeId: analysis.scopeId,
+    scopeAttr: analysis.scopeAttr
   };
 }

@@ -18,6 +18,12 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon'
 };
 
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  'Pragma': 'no-cache',
+  'Expires': '0'
+};
+
 /**
  * Start the Liquid development server with fast compilation, hot reload,
  * real-time request logging, and phone-friendly in-browser runtime error overlay.
@@ -163,7 +169,10 @@ function handleRequest(req, res, { rootDir, sseClients }) {
   // Static assets
   const ext = path.extname(filePath).toLowerCase();
   const mime = MIME_TYPES[ext] || 'application/octet-stream';
-  res.writeHead(200, { 'Content-Type': mime });
+  res.writeHead(200, {
+    'Content-Type': mime,
+    ...NO_CACHE_HEADERS
+  });
   fs.createReadStream(filePath).pipe(res);
 }
 
@@ -430,7 +439,10 @@ function serveIndexHtml(rootDir, res) {
 
   // Inject import map first, then dev client script before </head>
   html = html.replace('</head>', `${importMap}\n${devClientScript}\n</head>`);
-  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    ...NO_CACHE_HEADERS
+  });
   res.end(html);
 }
 
@@ -462,13 +474,15 @@ if (typeof window !== 'undefined') {
 
     // Inject scoped CSS into document head
     if (compiled.css) {
+      const scopeId = compiled.scopeId || compiled.ast?.scopeId || 'default';
       const cssInjection = `
 if (typeof document !== 'undefined') {
-  const _styleId = "liq-style-${compiled.ast.scopeId || 'default'}";
+  const _styleId = "liq-style-${scopeId}";
   let _styleEl = document.getElementById(_styleId);
   if (!_styleEl) {
     _styleEl = document.createElement("style");
     _styleEl.id = _styleId;
+    _styleEl.setAttribute('data-liquid-component', ${JSON.stringify(relPath)});
     document.head.appendChild(_styleEl);
   }
   _styleEl.textContent = ${JSON.stringify(compiled.css)};
@@ -483,7 +497,10 @@ if (typeof document !== 'undefined') {
       js += `\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,${mapBase64}\n`;
     }
 
-    res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+    res.writeHead(200, {
+      'Content-Type': 'application/javascript; charset=utf-8',
+      ...NO_CACHE_HEADERS
+    });
     res.end(js);
   } catch (err) {
     // Print in terminal
@@ -500,7 +517,10 @@ _overlay.innerHTML = ${JSON.stringify(overlayHtml)};
 document.body.appendChild(_overlay);
 export default function() { return null; }
 `;
-    res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+    res.writeHead(200, {
+      'Content-Type': 'application/javascript; charset=utf-8',
+      ...NO_CACHE_HEADERS
+    });
     res.end(overlayJs);
   }
 }
@@ -508,7 +528,10 @@ export default function() { return null; }
 function serveJavaScript(filePath, res) {
   let content = fs.readFileSync(filePath, 'utf8');
   content = rewriteBareImports(content);
-  res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+  res.writeHead(200, {
+    'Content-Type': 'application/javascript; charset=utf-8',
+    ...NO_CACHE_HEADERS
+  });
   res.end(content);
 }
 
@@ -599,14 +622,20 @@ function handleModuleRequest(pkgRequest, res, rootDir) {
           }
         );
 
-        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+        res.writeHead(200, {
+          'Content-Type': 'application/javascript; charset=utf-8',
+          ...NO_CACHE_HEADERS
+        });
         res.end(code);
         return;
       }
     }
   } catch (e) {}
 
-  res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.writeHead(404, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    ...NO_CACHE_HEADERS
+  });
   res.end(`Cannot resolve module ${pkgRequest}`);
 }
 

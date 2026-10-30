@@ -26,9 +26,9 @@ export async function buildCommand(options = {}) {
   const allCss = [];
   const compiledModules = new Map(); // relPath -> compiledJs
 
-  const liqFiles = findFiles(rootDir, '.liq');
+  const liqFiles = findFiles(rootDir, '.liq').sort();
   for (const f of liqFiles) {
-    const rel = path.relative(rootDir, f);
+    const rel = path.relative(rootDir, f).replace(/\\/g, '/');
     const src = fs.readFileSync(f, 'utf8');
     const res = compile(src, { file: rel, runtimeModule: 'liquid' });
     if (res.css) {
@@ -38,9 +38,9 @@ export async function buildCommand(options = {}) {
   }
 
   // Also read any CSS files from src/
-  const cssFiles = findFiles(rootDir, '.css');
+  const cssFiles = findFiles(rootDir, '.css').sort();
   for (const f of cssFiles) {
-    const rel = path.relative(rootDir, f);
+    const rel = path.relative(rootDir, f).replace(/\\/g, '/');
     if (!rel.startsWith('node_modules') && !rel.startsWith('dist')) {
       allCss.push(fs.readFileSync(f, 'utf8'));
     }
