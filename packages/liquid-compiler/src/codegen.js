@@ -293,10 +293,13 @@ export function generate(ast, analysis, options = {}) {
     const eachSubLines = [];
     generateSubtreeInto(node.children, eachNodesVar, eachSubLines);
 
-    // Create item proxy so item.prop and item().prop both work cleanly!
+    // Create item proxy so item.prop, item(), and primitive {item} both work cleanly!
     const itemProxySetup = `    const ${itemArg} = new Proxy(${itemArg}Sig, {
       get(target, prop) {
         if (prop === 'isSignal') return true;
+        if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') {
+          return () => target();
+        }
         const val = target();
         return typeof val === 'object' && val !== null ? val[prop] : val;
       },
@@ -305,7 +308,7 @@ export function generate(ast, analysis, options = {}) {
     const ${indexArg} = new Proxy(${indexArg}Sig, {
       apply(target) { return target(); },
       get(target, prop) {
-        if (prop === Symbol.toPrimitive || prop === 'valueOf') return () => target();
+        if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') return () => target();
         return target[prop];
       }
     });`;
@@ -468,6 +471,9 @@ ${eachSubLines.map(l => '    ' + l).join('\n')}
       const itemProxySetup = `      const ${itemArg} = new Proxy(${itemArg}Sig, {
         get(target, prop) {
           if (prop === 'isSignal') return true;
+          if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') {
+            return () => target();
+          }
           const val = target();
           return typeof val === 'object' && val !== null ? val[prop] : val;
         },
@@ -476,7 +482,7 @@ ${eachSubLines.map(l => '    ' + l).join('\n')}
       const ${indexArg} = new Proxy(${indexArg}Sig, {
       apply(target) { return target(); },
       get(target, prop) {
-        if (prop === Symbol.toPrimitive || prop === 'valueOf') return () => target();
+        if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') return () => target();
         return target[prop];
       }
     });`;

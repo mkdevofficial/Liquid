@@ -1,5 +1,7 @@
 import { createStore } from 'liquid';
 
+let nextTodoId = 4;
+
 export const globalStore = createStore({
   appName: 'Liquid 🫟 Showcase',
   globalCount: 42,
@@ -21,7 +23,7 @@ export const globalStore = createStore({
     if (!title.trim()) return;
     this.todos = [
       ...this.todos,
-      { id: Date.now(), title: title.trim(), done: false }
+      { id: nextTodoId++, title: title.trim(), done: false }
     ];
   },
 

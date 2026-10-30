@@ -349,3 +349,110 @@ test('E2E Browser - mount watchdog diagnostic displays warning if #app mounts no
     process.chdir(prevCwd);
   }
 });
+
+test('E2E Browser - todo add-flow with 1, 2, many characters, Arabic/RTL, and emoji (Pass 2)', async () => {
+  const projPath = path.join(TEST_DIR, 'todo-flow-app');
+  await createCommand(projPath);
+
+  const prevCwd = process.cwd();
+  let server;
+  try {
+    process.chdir(projPath);
+    server = await devCommand({ port: 3515, host: '127.0.0.1' });
+
+    if (hasChromium()) {
+      await runWithChromium('http://127.0.0.1:3515/', async (send, { browserExceptions }) => {
+        await new Promise(r => setTimeout(r, 1200));
+
+        async function getTodoTexts() {
+          const res = await send('Runtime.evaluate', {
+            expression: 'Array.from(document.querySelectorAll(".todo-item span")).map(el => el.textContent.trim())',
+            returnByValue: true
+          });
+          return res.result.value || [];
+        }
+
+        async function typeAndAdd(inputText) {
+          await send('Runtime.evaluate', {
+            expression: `(() => {
+              const input = document.querySelector('input.input-text');
+              input.value = ${JSON.stringify(inputText)};
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+              const btn = Array.from(document.querySelectorAll('button.btn')).find(b => b.textContent.trim() === 'Add');
+              btn.click();
+            })()`,
+            returnByValue: true
+          });
+          await new Promise(r => setTimeout(r, 150));
+        }
+
+        // 1. Initial seeded items
+        const initial = await getTodoTexts();
+        assert.deepStrictEqual(initial, [
+          'Write elegant UI in .liq',
+          'Embrace fine-grained signals'
+        ]);
+
+        // 2. Add 1 character: 'X'
+        await typeAndAdd('X');
+        const after1Char = await getTodoTexts();
+        assert.deepStrictEqual(after1Char, [
+          'Write elegant UI in .liq',
+          'Embrace fine-grained signals',
+          'X'
+        ], '1-character input must be added as single item');
+
+        // 3. Add 2 characters: 'OK' (must not drop either character)
+        await typeAndAdd('OK');
+        const after2Chars = await getTodoTexts();
+        assert.deepStrictEqual(after2Chars, [
+          'Write elegant UI in .liq',
+          'Embrace fine-grained signals',
+          'X',
+          'OK'
+        ], '2-character input must be added as single item without dropping');
+
+        // 4. Add many characters / full sentence (must NOT split into characters)
+        await typeAndAdd('Fine-grained signals are fast');
+        const afterManyChars = await getTodoTexts();
+        assert.deepStrictEqual(afterManyChars, [
+          'Write elegant UI in .liq',
+          'Embrace fine-grained signals',
+          'X',
+          'OK',
+          'Fine-grained signals are fast'
+        ], 'Sentence must be added as single item, not split into characters');
+
+        // 5. Add Arabic / RTL text
+        await typeAndAdd('مرحبا بكم في ليكويد 🫟');
+        const afterArabic = await getTodoTexts();
+        assert.deepStrictEqual(afterArabic, [
+          'Write elegant UI in .liq',
+          'Embrace fine-grained signals',
+          'X',
+          'OK',
+          'Fine-grained signals are fast',
+          'مرحبا بكم في ليكويد 🫟'
+        ], 'Arabic text must be added intact as single item');
+
+        // 6. Add Emoji text
+        await typeAndAdd('🚀✨🎉 Ultra Fast UI');
+        const afterEmoji = await getTodoTexts();
+        assert.deepStrictEqual(afterEmoji, [
+          'Write elegant UI in .liq',
+          'Embrace fine-grained signals',
+          'X',
+          'OK',
+          'Fine-grained signals are fast',
+          'مرحبا بكم في ليكويد 🫟',
+          '🚀✨🎉 Ultra Fast UI'
+        ], 'Emoji text must be added intact as single item');
+
+        assert.strictEqual(browserExceptions.length, 0, 'Zero browser exceptions during add flow');
+      });
+    }
+  } finally {
+    if (server) server.close();
+    process.chdir(prevCwd);
+  }
+});

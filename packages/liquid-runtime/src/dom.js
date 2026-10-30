@@ -230,24 +230,55 @@ export function createEachBlock(anchor, listFn, keyFn, renderItemFn) {
   }
 
   effect(() => {
-    const rawList = listFn() || [];
-    const list = Array.isArray(rawList) ? rawList : Array.from(rawList);
+    const rawList = listFn() ?? [];
+    let list;
+
+    if (Array.isArray(rawList)) {
+      list = rawList;
+    } else if (rawList instanceof Set) {
+      list = Array.from(rawList);
+    } else if (rawList instanceof Map) {
+      list = Array.from(rawList.values());
+    } else {
+      if (rawList !== null && rawList !== undefined && rawList !== false) {
+        console.warn(`[Liquid Warning] <each> block expected an Array, but received ${typeof rawList} (${String(rawList)}). Non-array values are not iterated.`);
+      }
+      list = [];
+    }
+
     const newItemsMap = new Map();
     const newOrder = [];
+    const seenKeys = new Set();
 
     // First pass: identify reused vs new items
     for (let i = 0; i < list.length; i++) {
       const item = list[i];
-      const key = keyFn ? keyFn(item, i) : i;
+      let key = keyFn ? keyFn(item, i) : i;
 
-      if (itemsMap.has(key)) {
+      // Handle missing/undefined keys
+      if (key === undefined || key === null) {
+        if (keyFn) {
+          console.warn(`[Liquid Warning] Key function returned ${key} for item at index ${i}. Falling back to index.`);
+        }
+        key = i;
+      }
+
+      // Handle duplicate keys: warn and disambiguate so items are not dropped
+      let mapKey = key;
+      if (seenKeys.has(key)) {
+        console.warn(`[Liquid Warning] Duplicate key "${String(key)}" detected in <each> block at index ${i}. Keys must be unique to ensure proper DOM reconciliation.`);
+        mapKey = `${key}__liquid_dup_${i}`;
+      }
+      seenKeys.add(key);
+
+      if (itemsMap.has(mapKey)) {
         // Reuse existing item
-        const existing = itemsMap.get(key);
+        const existing = itemsMap.get(mapKey);
         existing.itemSignal.set(item);
         existing.indexSignal.set(i);
-        newItemsMap.set(key, existing);
+        newItemsMap.set(mapKey, existing);
         newOrder.push(existing);
-        itemsMap.delete(key);
+        itemsMap.delete(mapKey);
       } else {
         // Create new item
         const itemSignal = signal(item);
@@ -259,7 +290,7 @@ export function createEachBlock(anchor, listFn, keyFn, renderItemFn) {
         });
 
         const record = { scope: itemScope, nodes, itemSignal, indexSignal };
-        newItemsMap.set(key, record);
+        newItemsMap.set(mapKey, record);
         newOrder.push(record);
       }
     }

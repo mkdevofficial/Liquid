@@ -144,11 +144,12 @@ const todos = signal([
   { id: 2, title: 'Embrace fine-grained signals', done: false }
 ]);
 const newTodoTitle = signal('');
+let nextTodoId = 3;
 
 function addTodo() {
   const val = newTodoTitle().trim();
   if (!val) return;
-  todos.set([...todos(), { id: Date.now(), title: val, done: false }]);
+  todos.set([...todos(), { id: nextTodoId++, title: val, done: false }]);
   newTodoTitle.set('');
 }
 

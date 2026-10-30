@@ -137,3 +137,14 @@ This document records every non-trivial decision made in the design and implemen
 ## 17. Banner Emoji UTF-8 Integrity & Graceful Fallback
 - **Decision**: Maintain intact UTF-8 code point U+1FADF (`🫟`, Pouring Liquid) while providing automatic fallback to the plain word `"Liquid"` when `TERM=dumb`, when stdout is non-TTY, or in non-UTF-8 locales. Support manual overrides via `LIQUID_EMOJI=1` (force on) and `LIQUID_EMOJI=0` / `LIQUID_NO_EMOJI=1` (force off).
 - **Rationale**: Unicode 15.0 emojis may render as replacement boxes (``) in older terminal fonts, mobile shells, or CI environments. Graceful degradation preserves clean, legible output in all environments.
+
+---
+
+## 18. Each-Block Array Guards, Key Reconciliation & Proxy Primitive Semantics
+- **Decision**:
+  1. **Strict Non-Array Guards**: In `createEachBlock`, non-array inputs (specifically primitive strings, numbers, booleans) trigger a development warning (`[Liquid Warning] <each> block expected an Array...`) and default to an empty list `[]`. Only explicit collections (`Set` and `Map`) are converted to arrays via `.values()`. Strings are never treated as character iterables by `createEachBlock`.
+  2. **Key Reconciliation & Duplicate Disambiguation**: When an each-block item lacks a key or evaluates to `null`/`undefined`, the runtime emits a dev warning and falls back to item value or index. When duplicate keys are detected, the runtime logs a dev warning (`[Liquid Warning] Duplicate key "${key}" detected...`) and synthesizes a collision-free disambiguation key (`${key}__liquid_dup_${index}`). Duplicate items are preserved and rendered into the DOM rather than silently overwritten or dropped.
+  3. **Proxy `Symbol.toPrimitive` Support**: Reactive loop items and indexes wrapped in runtime Proxies expose `Symbol.toPrimitive`, `valueOf`, and `toString` traps returning `() => target()`. This prevents fatal `TypeError: string is not a function` during string interpolation (`${item}`) and template rendering.
+  4. **Monotonic Store ID Generation**: Replace `Date.now()` with monotonic ID sequence counters (`nextId++`) in templates and examples to prevent ID collisions on rapid inputs.
+- **Rationale**: In JavaScript, `Array.from(string)` decomposes a string into individual Unicode characters. When combined with keyed reconciliation where string items have `item.id === undefined`, duplicate keys collide on `undefined`, dropping subsequent items. Guarding type conversions, disambiguating keys, and supporting primitive proxy unwrapping prevents item character splitting and node dropping bugs entirely.
+
