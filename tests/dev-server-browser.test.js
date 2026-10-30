@@ -42,27 +42,37 @@ async function runWithChromium(url, checkFn) {
     '--headless=new',
     '--no-sandbox',
     '--disable-gpu',
+    '--disable-dev-shm-usage',
+    '--disable-software-rasterizer',
+    '--disable-background-networking',
+    '--disable-default-apps',
+    '--disable-sync',
+    '--disable-translate',
+    '--no-first-run',
     `--user-data-dir=${tmpProfile}`,
     '--remote-debugging-port=0'
   ]);
 
   let wsUrl = null;
-  chrome.stderr.on('data', (d) => {
-    const str = d.toString();
-    const match = str.match(/DevTools listening on (ws:\/\/[^\s]+)/);
+  let outputBuffer = '';
+  const onData = (d) => {
+    outputBuffer += d.toString();
+    const match = outputBuffer.match(/DevTools listening on (ws:\/\/[^\s]+)/);
     if (match) {
       wsUrl = match[1];
     }
-  });
+  };
+  chrome.stderr.on('data', onData);
+  chrome.stdout.on('data', onData);
 
   try {
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 80; i++) {
       if (wsUrl) break;
       await new Promise(r => setTimeout(r, 100));
     }
 
     if (!wsUrl) {
-      throw new Error('Chromium did not output DevTools WebSocket URL in time');
+      throw new Error('Chromium did not output DevTools WebSocket URL in time: ' + outputBuffer.slice(-500));
     }
 
     const host = new URL(wsUrl).host;
@@ -104,11 +114,24 @@ async function runWithChromium(url, checkFn) {
     pageWs.close();
     return result;
   } finally {
-    chrome.kill();
+    try { chrome.kill('SIGKILL'); } catch {}
     setTimeout(() => {
       try { fs.rmSync(tmpProfile, { recursive: true, force: true }); } catch {}
     }, 500);
   }
+}
+
+async function waitForSelector(send, selector, timeoutMs = 8000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const res = await send('Runtime.evaluate', {
+      expression: `Boolean(document.querySelector(${JSON.stringify(selector)}))`,
+      returnByValue: true
+    });
+    if (res?.result?.value) return true;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return false;
 }
 
 /**
@@ -216,7 +239,7 @@ test('E2E Browser - standard scaffolded project renders visible content and is N
     // 2. Headless Chromium verification (if available)
     if (hasChromium()) {
       await runWithChromium('http://127.0.0.1:3511/', async (send, { browserExceptions }) => {
-        await new Promise(r => setTimeout(r, 1200));
+        await waitForSelector(send, '.app-container');
 
         const appHtmlRes = await send('Runtime.evaluate', {
           expression: 'document.getElementById("app").innerHTML'
@@ -256,7 +279,7 @@ test('E2E Browser - minimal scaffolded project (--minimal) renders visible conte
     // 2. Headless Chromium verification (if available)
     if (hasChromium()) {
       await runWithChromium('http://127.0.0.1:3512/', async (send, { browserExceptions }) => {
-        await new Promise(r => setTimeout(r, 1200));
+        await waitForSelector(send, '.container');
 
         const appHtmlRes = await send('Runtime.evaluate', {
           expression: 'document.getElementById("app").innerHTML'
@@ -297,7 +320,7 @@ h1 Will not render
 
     if (hasChromium()) {
       await runWithChromium('http://127.0.0.1:3513/', async (send) => {
-        await new Promise(r => setTimeout(r, 1200));
+        await waitForSelector(send, '#liquid-error-overlay');
 
         const overlayRes = await send('Runtime.evaluate', {
           expression: 'document.getElementById("liquid-error-overlay")?.innerText'
@@ -331,8 +354,8 @@ test('E2E Browser - mount watchdog diagnostic displays warning if #app mounts no
 
     if (hasChromium()) {
       await runWithChromium('http://127.0.0.1:3514/', async (send) => {
-        // Wait 2.2s for watchdog
-        await new Promise(r => setTimeout(r, 2300));
+        // Wait for watchdog to display after 2s
+        await waitForSelector(send, '#liquid-mount-watchdog', 6000);
 
         const watchdogRes = await send('Runtime.evaluate', {
           expression: 'document.getElementById("liquid-mount-watchdog")?.innerText'
@@ -350,7 +373,7 @@ test('E2E Browser - mount watchdog diagnostic displays warning if #app mounts no
   }
 });
 
-test('E2E Browser - todo add-flow with 1, 2, many characters, Arabic/RTL, and emoji (Pass 2)', async () => {
+test('E2E Browser - faithful real typing with character-by-character events, IME composition, and Enter key (Pass 3)', async () => {
   const projPath = path.join(TEST_DIR, 'todo-flow-app');
   await createCommand(projPath);
 
@@ -362,7 +385,7 @@ test('E2E Browser - todo add-flow with 1, 2, many characters, Arabic/RTL, and em
 
     if (hasChromium()) {
       await runWithChromium('http://127.0.0.1:3515/', async (send, { browserExceptions }) => {
-        await new Promise(r => setTimeout(r, 1200));
+        await waitForSelector(send, '.todo-item');
 
         async function getTodoTexts() {
           const res = await send('Runtime.evaluate', {
@@ -372,18 +395,82 @@ test('E2E Browser - todo add-flow with 1, 2, many characters, Arabic/RTL, and em
           return res.result.value || [];
         }
 
-        async function typeAndAdd(inputText) {
+        async function getInputValue() {
+          const res = await send('Runtime.evaluate', {
+            expression: 'document.querySelector("input.input-text")?.value',
+            returnByValue: true
+          });
+          return res.result.value ?? '';
+        }
+
+        /**
+         * Real faithful character-by-character typing simulation.
+         * For each character: keydown -> beforeinput -> input.value += char -> input -> keyup.
+         */
+        async function typeCharacterByCharacter(textToType) {
           await send('Runtime.evaluate', {
             expression: `(() => {
               const input = document.querySelector('input.input-text');
-              input.value = ${JSON.stringify(inputText)};
-              input.dispatchEvent(new Event('input', { bubbles: true }));
+              input.focus();
+              const chars = Array.from(${JSON.stringify(textToType)});
+              for (const c of chars) {
+                input.dispatchEvent(new KeyboardEvent('keydown', { key: c, bubbles: true, cancelable: true }));
+                input.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: c, bubbles: true }));
+                input.value += c;
+                input.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: c, bubbles: true }));
+                input.dispatchEvent(new KeyboardEvent('keyup', { key: c, bubbles: true, cancelable: true }));
+              }
+            })()`,
+            returnByValue: true
+          });
+          await new Promise(r => setTimeout(r, 50));
+        }
+
+        /**
+         * Real IME composition simulation for East Asian/virtual keyboards.
+         * compositionstart -> compositionupdate -> beforeinput -> input -> compositionend -> keydown/keyup.
+         */
+        async function typeWithIMEComposition(textToType) {
+          await send('Runtime.evaluate', {
+            expression: `(() => {
+              const input = document.querySelector('input.input-text');
+              input.focus();
+              input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+              input.dispatchEvent(new CompositionEvent('compositionupdate', { data: ${JSON.stringify(textToType)}, bubbles: true }));
+              input.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertCompositionText', data: ${JSON.stringify(textToType)}, bubbles: true }));
+              input.value += ${JSON.stringify(textToType)};
+              input.dispatchEvent(new InputEvent('input', { inputType: 'insertCompositionText', data: ${JSON.stringify(textToType)}, bubbles: true }));
+              input.dispatchEvent(new CompositionEvent('compositionend', { data: ${JSON.stringify(textToType)}, bubbles: true }));
+              // Android Gboard sends keydown with keyCode 229 during composition
+              input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Unidentified', keyCode: 229, bubbles: true }));
+              input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Unidentified', keyCode: 229, bubbles: true }));
+            })()`,
+            returnByValue: true
+          });
+          await new Promise(r => setTimeout(r, 50));
+        }
+
+        async function clickAddButton() {
+          await send('Runtime.evaluate', {
+            expression: `(() => {
               const btn = Array.from(document.querySelectorAll('button.btn')).find(b => b.textContent.trim() === 'Add');
               btn.click();
             })()`,
             returnByValue: true
           });
-          await new Promise(r => setTimeout(r, 150));
+          await new Promise(r => setTimeout(r, 100));
+        }
+
+        async function pressKey(key, keyCode = 0) {
+          await send('Runtime.evaluate', {
+            expression: `(() => {
+              const input = document.querySelector('input.input-text');
+              input.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, keyCode: ${keyCode}, which: ${keyCode}, bubbles: true, cancelable: true }));
+              input.dispatchEvent(new KeyboardEvent('keyup', { key: ${JSON.stringify(key)}, keyCode: ${keyCode}, which: ${keyCode}, bubbles: true, cancelable: true }));
+            })()`,
+            returnByValue: true
+          });
+          await new Promise(r => setTimeout(r, 100));
         }
 
         // 1. Initial seeded items
@@ -393,60 +480,96 @@ test('E2E Browser - todo add-flow with 1, 2, many characters, Arabic/RTL, and em
           'Embrace fine-grained signals'
         ]);
 
-        // 2. Add 1 character: 'X'
-        await typeAndAdd('X');
-        const after1Char = await getTodoTexts();
-        assert.deepStrictEqual(after1Char, [
-          'Write elegant UI in .liq',
-          'Embrace fine-grained signals',
-          'X'
-        ], '1-character input must be added as single item');
+        // 2. Type 'a', then 'b' character by character
+        // CRITICAL CHECK: The list must remain completely unchanged while typing!
+        await typeCharacterByCharacter('a');
+        let todosWhileTypingA = await getTodoTexts();
+        assert.deepStrictEqual(todosWhileTypingA, initial, 'Typing "a" must NOT add any item before Add is pressed');
 
-        // 3. Add 2 characters: 'OK' (must not drop either character)
-        await typeAndAdd('OK');
-        const after2Chars = await getTodoTexts();
-        assert.deepStrictEqual(after2Chars, [
-          'Write elegant UI in .liq',
-          'Embrace fine-grained signals',
-          'X',
-          'OK'
-        ], '2-character input must be added as single item without dropping');
+        await typeCharacterByCharacter('b');
+        let todosWhileTypingB = await getTodoTexts();
+        assert.deepStrictEqual(todosWhileTypingB, initial, 'Typing "b" must NOT add any item before Add is pressed');
+        assert.strictEqual(await getInputValue(), 'ab', 'Input must retain typed string "ab"');
 
-        // 4. Add many characters / full sentence (must NOT split into characters)
-        await typeAndAdd('Fine-grained signals are fast');
-        const afterManyChars = await getTodoTexts();
-        assert.deepStrictEqual(afterManyChars, [
+        // Now click Add -> exactly ONE item "ab" is added, input clears
+        await clickAddButton();
+        const afterAB = await getTodoTexts();
+        assert.deepStrictEqual(afterAB, [
           'Write elegant UI in .liq',
           'Embrace fine-grained signals',
-          'X',
-          'OK',
+          'ab'
+        ], 'Clicking Add must add exactly ONE item "ab"');
+        assert.strictEqual(await getInputValue(), '', 'Input must be cleared after adding');
+
+        // 3. Long sentence typing character-by-character
+        await typeCharacterByCharacter('Fine-grained signals are fast');
+        let todosWhileTypingSentence = await getTodoTexts();
+        assert.deepStrictEqual(todosWhileTypingSentence, afterAB, 'Typing sentence must not add items while typing');
+        assert.strictEqual(await getInputValue(), 'Fine-grained signals are fast');
+
+        await clickAddButton();
+        const afterSentence = await getTodoTexts();
+        assert.deepStrictEqual(afterSentence, [
+          'Write elegant UI in .liq',
+          'Embrace fine-grained signals',
+          'ab',
           'Fine-grained signals are fast'
-        ], 'Sentence must be added as single item, not split into characters');
+        ]);
+        assert.strictEqual(await getInputValue(), '');
 
-        // 5. Add Arabic / RTL text
-        await typeAndAdd('مرحبا بكم في ليكويد 🫟');
+        // 4. Arabic RTL text character-by-character
+        await typeCharacterByCharacter('مرحبا بكم في ليكويد 🫟');
+        let todosWhileTypingArabic = await getTodoTexts();
+        assert.deepStrictEqual(todosWhileTypingArabic, afterSentence, 'Typing Arabic must not add items while typing');
+
+        await clickAddButton();
         const afterArabic = await getTodoTexts();
         assert.deepStrictEqual(afterArabic, [
           'Write elegant UI in .liq',
           'Embrace fine-grained signals',
-          'X',
-          'OK',
+          'ab',
           'Fine-grained signals are fast',
           'مرحبا بكم في ليكويد 🫟'
-        ], 'Arabic text must be added intact as single item');
+        ]);
 
-        // 6. Add Emoji text
-        await typeAndAdd('🚀✨🎉 Ultra Fast UI');
+        // 5. Emoji with IME Composition sequence
+        await typeWithIMEComposition('🚀✨🎉 Ultra Fast UI');
+        let todosDuringIME = await getTodoTexts();
+        assert.deepStrictEqual(todosDuringIME, afterArabic, 'IME composition must not add items before commit');
+
+        await clickAddButton();
         const afterEmoji = await getTodoTexts();
         assert.deepStrictEqual(afterEmoji, [
           'Write elegant UI in .liq',
           'Embrace fine-grained signals',
-          'X',
-          'OK',
+          'ab',
           'Fine-grained signals are fast',
           'مرحبا بكم في ليكويد 🫟',
           '🚀✨🎉 Ultra Fast UI'
-        ], 'Emoji text must be added intact as single item');
+        ]);
+
+        // 6. Enter key support (@keydown.enter)
+        // Non-Enter keys (e.g. Tab, Escape, ArrowDown) must NOT add items
+        await typeCharacterByCharacter('Enter key item');
+        await pressKey('Tab', 9);
+        await pressKey('Escape', 27);
+        await pressKey('ArrowDown', 40);
+        let todosAfterOtherKeys = await getTodoTexts();
+        assert.deepStrictEqual(todosAfterOtherKeys, afterEmoji, 'Non-Enter keys must NOT add items');
+
+        // Pressing Enter must add the item and clear the input
+        await pressKey('Enter', 13);
+        const afterEnter = await getTodoTexts();
+        assert.deepStrictEqual(afterEnter, [
+          'Write elegant UI in .liq',
+          'Embrace fine-grained signals',
+          'ab',
+          'Fine-grained signals are fast',
+          'مرحبا بكم في ليكويد 🫟',
+          '🚀✨🎉 Ultra Fast UI',
+          'Enter key item'
+        ], 'Pressing Enter must add the item without clicking Add button');
+        assert.strictEqual(await getInputValue(), '', 'Input must be cleared after Enter');
 
         assert.strictEqual(browserExceptions.length, 0, 'Zero browser exceptions during add flow');
       });

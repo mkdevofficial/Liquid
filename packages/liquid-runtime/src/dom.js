@@ -1,4 +1,4 @@
-import { effect, createScope, signal, onDestroy } from './signals.js';
+import { effect, createScope, signal, untrack, onDestroy } from './signals.js';
 
 /**
  * Create a DOM element with optional attributes and class names.
@@ -59,7 +59,10 @@ export function bindAttr(el, name, getter) {
   effect(() => {
     const val = getter();
     if (isProp) {
-      el[name] = val ?? (name === 'checked' ? false : '');
+      const nextVal = val ?? (name === 'checked' ? false : '');
+      if (el[name] !== nextVal) {
+        el[name] = nextVal;
+      }
     } else if (val === false || val === null || val === undefined) {
       el.removeAttribute(name);
     } else if (val === true) {
@@ -72,6 +75,15 @@ export function bindAttr(el, name, getter) {
 
 /**
  * Attach an event listener to an element with modifier support.
+ * Modifiers:
+ *   - .prevent / .prev: calls e.preventDefault()
+ *   - .stop: calls e.stopPropagation()
+ *   - .once: listens with { once: true }
+ *   - .self: only fires if e.target === el
+ *   - Keyboard modifiers (enter, escape/esc, tab, space, delete, up, down, left, right):
+ *     filters keyboard events by key/keyCode and suppresses IME composition keys.
+ *
+ * All handlers execute untracked so they do not inadvertently subscribe ambient effects.
  *
  * @param {HTMLElement} el
  * @param {string} eventName
@@ -83,11 +95,75 @@ export function listen(el, eventName, handler, modifiers = []) {
   const hasPrevent = modifiers.includes('prevent') || modifiers.includes('prev');
   const hasStop = modifiers.includes('stop');
   const hasOnce = modifiers.includes('once');
+  const hasSelf = modifiers.includes('self');
+
+  // Key modifiers
+  const hasEnter = modifiers.includes('enter');
+  const hasEscape = modifiers.includes('escape') || modifiers.includes('esc');
+  const hasTab = modifiers.includes('tab');
+  const hasSpace = modifiers.includes('space');
+  const hasDelete = modifiers.includes('delete');
+  const hasUp = modifiers.includes('up');
+  const hasDown = modifiers.includes('down');
+  const hasLeft = modifiers.includes('left');
+  const hasRight = modifiers.includes('right');
+
+  const hasKeyModifiers = hasEnter || hasEscape || hasTab || hasSpace || hasDelete || hasUp || hasDown || hasLeft || hasRight;
 
   function wrappedListener(e) {
+    if (hasSelf && e && e.target !== el) return;
+
+    if (hasKeyModifiers && e) {
+      // Ignore during IME composition (virtual keyboards, East Asian IMEs, etc.)
+      if (e.isComposing) return;
+
+      const key = typeof e.key === 'string' ? e.key : '';
+      const keyCode = typeof e.keyCode === 'number' ? e.keyCode : 0;
+      const which = typeof e.which === 'number' ? e.which : 0;
+
+      if (hasEnter) {
+        const isEnter = key === 'Enter' || key === 'enter' || keyCode === 13 || which === 13;
+        if (!isEnter) return;
+      }
+      if (hasEscape) {
+        const isEsc = key === 'Escape' || key === 'Esc' || keyCode === 27 || which === 27;
+        if (!isEsc) return;
+      }
+      if (hasTab) {
+        const isTab = key === 'Tab' || keyCode === 9 || which === 9;
+        if (!isTab) return;
+      }
+      if (hasSpace) {
+        const isSpace = key === ' ' || key === 'Spacebar' || keyCode === 32 || which === 32;
+        if (!isSpace) return;
+      }
+      if (hasDelete) {
+        const isDelete = key === 'Delete' || key === 'Backspace' || keyCode === 8 || keyCode === 46;
+        if (!isDelete) return;
+      }
+      if (hasUp) {
+        const isUp = key === 'ArrowUp' || key === 'Up' || keyCode === 38 || which === 38;
+        if (!isUp) return;
+      }
+      if (hasDown) {
+        const isDown = key === 'ArrowDown' || key === 'Down' || keyCode === 40 || which === 40;
+        if (!isDown) return;
+      }
+      if (hasLeft) {
+        const isLeft = key === 'ArrowLeft' || key === 'Left' || keyCode === 37 || which === 37;
+        if (!isLeft) return;
+      }
+      if (hasRight) {
+        const isRight = key === 'ArrowRight' || key === 'Right' || keyCode === 39 || which === 39;
+        if (!isRight) return;
+      }
+    }
+
     if (hasPrevent) e.preventDefault();
     if (hasStop) e.stopPropagation();
-    handler(e);
+
+    // Event handlers must execute untracked so they never subscribe ambient effects
+    untrack(() => handler(e));
   }
 
   el.addEventListener(eventName, wrappedListener, { once: hasOnce });

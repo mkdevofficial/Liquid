@@ -13,6 +13,7 @@ globalThis.Text = window.Text;
 import {
   signal,
   computed,
+  effect,
   element,
   text,
   bindText,
@@ -328,4 +329,106 @@ test('DOM - each-block handles missing/undefined keys with fallback', () => {
   } finally {
     console.warn = origWarn;
   }
+});
+
+test('DOM - listen key modifier filtering: typing letters does not trigger .enter handler, Enter key does (Pass 3, 5c)', () => {
+  const input = element('input');
+  let enterCallCount = 0;
+  let lastEvent = null;
+
+  listen(input, 'keydown', (e) => {
+    enterCallCount++;
+    lastEvent = e;
+  }, ['enter']);
+
+  // 1. Dispatching non-Enter keys (letters, numbers, space, tab, escape) must NOT trigger handler
+  for (const key of ['a', 'b', 'c', '1', ' ', 'Tab', 'Escape', 'Shift']) {
+    input.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true }));
+  }
+  assert.strictEqual(enterCallCount, 0, 'Typing regular keys must never trigger .enter handler');
+
+  // 2. Dispatching during IME composition (isComposing = true, keyCode 229) must NOT trigger handler
+  input.dispatchEvent(new window.KeyboardEvent('keydown', {
+    key: 'Enter',
+    keyCode: 229,
+    isComposing: true,
+    bubbles: true
+  }));
+  assert.strictEqual(enterCallCount, 0, 'IME composition keys must not trigger .enter handler');
+
+  // 3. Dispatching actual Enter key (key: "Enter" or keyCode: 13) MUST trigger handler
+  input.dispatchEvent(new window.KeyboardEvent('keydown', {
+    key: 'Enter',
+    keyCode: 13,
+    bubbles: true
+  }));
+  assert.strictEqual(enterCallCount, 1, 'Enter key must trigger .enter handler');
+
+  // 4. Dispatching with keyCode: 13 fallback
+  input.dispatchEvent(new window.KeyboardEvent('keydown', {
+    key: '',
+    keyCode: 13,
+    bubbles: true
+  }));
+  assert.strictEqual(enterCallCount, 2, 'keyCode: 13 fallback must trigger .enter handler');
+});
+
+test('DOM - input element with bindInput and declared keydown.enter has only declared listeners (Pass 3, 5e)', () => {
+  const input = element('input');
+  const textSig = signal('');
+  let addCount = 0;
+
+  function addTodo() {
+    addCount++;
+  }
+
+  // Exact scaffold pattern:
+  // input $value={textSig} @keydown.enter=addTodo
+  listen(input, 'keydown', addTodo, ['enter']);
+  bindInput(input, textSig, 'value');
+
+  // Character by character simulation
+  for (const char of ['a', 'b', 'c']) {
+    // 1. keydown (key: char)
+    input.dispatchEvent(new window.KeyboardEvent('keydown', { key: char, bubbles: true }));
+    // 2. input
+    input.value += char;
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    // 3. keyup
+    input.dispatchEvent(new window.KeyboardEvent('keyup', { key: char, bubbles: true }));
+  }
+
+  // textSig must hold 'abc'
+  assert.strictEqual(textSig(), 'abc', 'Signal must receive full string value');
+  // addTodo must NOT have been called even once during typing!
+  assert.strictEqual(addCount, 0, 'addTodo must NOT be called on character keystrokes');
+
+  // Pressing Enter must trigger addTodo
+  input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+  assert.strictEqual(addCount, 1, 'Pressing Enter must trigger addTodo');
+});
+
+test('DOM - event handlers execute untracked and do not subscribe ambient effects (Pass 3, 5d)', () => {
+  const btn = element('button');
+  const source = signal(10);
+  let effectRuns = 0;
+
+  // Outer effect that should NOT be subscribed by signal reads in handler
+  effect(() => {
+    effectRuns++;
+    listen(btn, 'click', () => {
+      // Reading a signal inside an event handler
+      const val = source();
+    });
+  });
+
+  assert.strictEqual(effectRuns, 1);
+
+  // Click the button
+  btn.dispatchEvent(new window.Event('click'));
+  assert.strictEqual(effectRuns, 1);
+
+  // Changing source must NOT re-run the effect because the read was in an event listener
+  source.set(20);
+  assert.strictEqual(effectRuns, 1, 'Event listener signal reads must be untracked and not cause effect reruns');
 });

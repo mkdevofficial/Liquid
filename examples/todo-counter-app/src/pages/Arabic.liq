@@ -10,10 +10,12 @@ const arabicTasks = signal([
 ]);
 const newTask = signal('');
 
+let nextTaskId = 4;
+
 function addTask() {
   const t = newTask().trim();
   if (!t) return;
-  arabicTasks.set([...arabicTasks(), { id: Date.now(), text: t, completed: false }]);
+  arabicTasks.set([...arabicTasks(), { id: nextTaskId++, text: t, completed: false }]);
   newTask.set('');
 }
 

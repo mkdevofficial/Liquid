@@ -148,3 +148,13 @@ This document records every non-trivial decision made in the design and implemen
   4. **Monotonic Store ID Generation**: Replace `Date.now()` with monotonic ID sequence counters (`nextId++`) in templates and examples to prevent ID collisions on rapid inputs.
 - **Rationale**: In JavaScript, `Array.from(string)` decomposes a string into individual Unicode characters. When combined with keyed reconciliation where string items have `item.id === undefined`, duplicate keys collide on `undefined`, dropping subsequent items. Guarding type conversions, disambiguating keys, and supporting primitive proxy unwrapping prevents item character splitting and node dropping bugs entirely.
 
+---
+
+## 19. Event Modifier Filtering & Untracked Listener Execution
+- **Decision**:
+  1. **Keyboard Modifier Filtering**: In `listen(el, eventName, handler, modifiers)`, keyboard modifiers (`enter`, `escape`/`esc`, `tab`, `space`, `delete`, `up`, `down`, `left`, `right`) explicitly filter events using `e.key`, `e.keyCode`, and `e.which`. If an event does not match the declared key modifier, or if `e.isComposing` is true (such as during virtual keyboard IME composition on Android Gboard), the listener returns immediately without executing the handler.
+  2. **Untracked Handler Execution**: All event listener callbacks are wrapped in `untrack(() => handler(e))`. Signal reads within event callbacks are strictly untracked and never create accidental subscriptions in any active reactive effect scope.
+  3. **Cursor Preservation in Property Bindings**: In `bindAttr`, property values (e.g. `el.value`, `el.checked`) are only reassigned when `el[name] !== nextVal`. This prevents redundant DOM mutations that would reset input selection or cursor positions during rapid character typing.
+- **Rationale**: Directives such as `@keydown.enter=addTodo` compile to `listen(el, "keydown", addTodo, ["enter"])`. Without key filtering in `listen`, `addTodo` executed on every single keystroke (`keydown`), creating a todo item per character and clearing the input continuously while typing. Correct modifier filtering and untracked execution ensure handlers fire strictly on their intended events.
+
+

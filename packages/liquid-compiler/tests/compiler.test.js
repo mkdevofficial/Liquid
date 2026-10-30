@@ -81,3 +81,26 @@ test('Compiler - syntax error reporting', () => {
     return true;
   });
 });
+
+test('Compiler - click and event handlers are untracked and not wrapped in effects (Pass 3)', () => {
+  const source = `--- logic
+import { signal } from 'liquid';
+const count = signal(0);
+function handleClick() {
+  count.set(count() + 1);
+}
+
+--- ui
+div
+  button @click=handleClick Click me
+  span {count()}
+`;
+
+  const result = compile(source, { file: 'Button.liq' });
+  // Verify listen() is generated directly, outside of bindAttr or effect
+  assert.ok(result.code.includes('listen('), 'Must generate listen call');
+  assert.ok(result.code.includes('listen(_el1, "click", handleClick, [])'), 'Must pass clean click handler to listen');
+  // Ensure listen is NOT inside an effect or bindAttr wrapper
+  assert.strictEqual(result.code.includes('effect(() => { listen'), false, 'listen must not be inside an effect');
+  assert.strictEqual(result.code.includes('bindAttr(_el1, "click"'), false, 'click must not be compiled as attribute');
+});
