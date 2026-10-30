@@ -1,0 +1,30 @@
+{
+  "name": "liquid",
+  "version": "1.0.0",
+  "description": "🫟 The ultra-concise frontend framework for the web",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./compiler": "./packages/liquid-compiler/src/index.js",
+    "./runtime": "./packages/liquid-runtime/src/index.js",
+    "./router": "./packages/liquid-router/src/index.js"
+  },
+  "files": [
+    "src"
+  ],
+  "dependencies": {
+    "liquid-compiler": "^1.0.0",
+    "liquid-runtime": "^1.0.0",
+    "liquid-router": "^1.0.0"
+  },
+  "keywords": [
+    "liquid",
+    "framework",
+    "signals",
+    "reactive",
+    "compiler",
+    "runtime"
+  ],
+  "license": "MIT"
+}

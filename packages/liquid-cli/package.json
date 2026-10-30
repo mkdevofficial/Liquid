@@ -1,0 +1,23 @@
+{
+  "name": "liquid-cli",
+  "version": "1.0.0",
+  "description": "🫟 CLI and development server for the Liquid frontend framework",
+  "type": "module",
+  "bin": {
+    "liquid": "./bin/liquid.js"
+  },
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "dependencies": {
+    "liquid-compiler": "^1.0.0",
+    "liquid-runtime": "^1.0.0",
+    "liquid-router": "^1.0.0"
+  },
+  "license": "MIT"
+}

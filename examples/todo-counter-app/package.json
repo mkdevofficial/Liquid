@@ -1,0 +1,16 @@
+{
+  "name": "todo-counter-app",
+  "version": "1.0.0",
+  "description": "🫟 Example Liquid App — Counter, Todos, Routing, Store, and RTL Arabic Support",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "liquid dev",
+    "build": "liquid build",
+    "preview": "liquid preview",
+    "check": "liquid check"
+  },
+  "dependencies": {
+    "liquid": "^1.0.0"
+  }
+}

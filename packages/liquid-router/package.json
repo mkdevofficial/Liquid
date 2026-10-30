@@ -1,0 +1,23 @@
+{
+  "name": "liquid-router",
+  "version": "1.0.0",
+  "description": "🫟 Tree-shakeable router for Liquid",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src"
+  ],
+  "dependencies": {
+    "liquid-runtime": "^1.0.0"
+  },
+  "keywords": [
+    "liquid",
+    "router",
+    "spa",
+    "routing"
+  ],
+  "license": "MIT"
+}

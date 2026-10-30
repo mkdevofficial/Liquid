@@ -1,0 +1,21 @@
+{
+  "name": "liquid-compiler",
+  "version": "1.0.0",
+  "description": "🫟 Compiler for the Liquid frontend framework",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src"
+  ],
+  "keywords": [
+    "liquid",
+    "compiler",
+    "reactive",
+    "signals",
+    "parser"
+  ],
+  "license": "MIT"
+}

@@ -1,0 +1,21 @@
+{
+  "name": "liquid-runtime",
+  "version": "1.0.0",
+  "description": "🫟 Fine-grained reactive runtime for Liquid",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src"
+  ],
+  "keywords": [
+    "liquid",
+    "signals",
+    "reactivity",
+    "runtime",
+    "dom"
+  ],
+  "license": "MIT"
+}
