@@ -1,4 +1,4 @@
-import { signal, computed, effect, element, text, onDestroy } from 'liquid-runtime';
+import { signal, computed, effect, untrack, element, text, onDestroy } from '@mkdevofficial/liquid-runtime';
 
 /**
  * Match a route path pattern against a URL path.
@@ -154,15 +154,17 @@ export function createRouter({ routes = [], mode = 'hash' }) {
     let currentRenderedNodes = [];
 
     // Initial synchronous render of active component
-    const initialComp = currentComponent();
+    const initialRoute = currentRoute();
+    const initialComp = initialRoute.component;
     if (initialComp) {
-      const rendered = initialComp({ ...props, params: currentParams() });
+      const rendered = untrack(() => initialComp({ ...props, params: initialRoute.params, query: initialRoute.query }));
       currentRenderedNodes = Array.isArray(rendered) ? rendered : [rendered];
     }
 
     let isInitial = true;
     effect(() => {
-      const Comp = currentComponent();
+      const route = currentRoute();
+      const Comp = route.component;
       if (isInitial) {
         isInitial = false;
         return; // Already rendered synchronously on creation
@@ -174,7 +176,7 @@ export function createRouter({ routes = [], mode = 'hash' }) {
       currentRenderedNodes = [];
 
       if (Comp) {
-        const rendered = Comp({ ...props, params: currentParams() });
+        const rendered = untrack(() => Comp({ ...props, params: route.params, query: route.query }));
         const nodes = Array.isArray(rendered) ? rendered : [rendered];
         currentRenderedNodes = nodes;
 

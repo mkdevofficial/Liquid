@@ -76,14 +76,32 @@ export function parseInterpolatedText(str) {
  * "items as item, idx (item.id)" -> { collection: "items", item: "item", index: "idx", key: "item.id" }
  */
 export function parseEachArgs(argsString, loc, file, source) {
-  const trimmed = argsString.trim();
+  let trimmed = argsString.trim();
+
+  // Strip wrapping outer parentheses if developer wrapped the entire each statement in ( ... )
+  if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+    let depth = 0;
+    let closedEarly = false;
+    for (let i = 0; i < trimmed.length - 1; i++) {
+      if (trimmed[i] === '(') depth++;
+      else if (trimmed[i] === ')') depth--;
+      if (depth === 0) {
+        closedEarly = true;
+        break;
+      }
+    }
+    if (!closedEarly) {
+      trimmed = trimmed.slice(1, -1).trim();
+    }
+  }
+
   // Match: <collection> as <item> [, <index>] [ (<key>) ]
   const match = trimmed.match(/^(.+?)\s+as\s+([a-zA-Z_$][a-zA-Z0-9_$]*)(?:\s*,\s*([a-zA-Z_$][a-zA-Z0-9_$]*))?(?:\s*\((.+)\))?$/);
 
   if (!match) {
     throw new LiquidSyntaxError(
       `Malformed 'each' statement: '${argsString}'. Expected 'each <collection> as <item> [, <index>] [(<key>)]'`,
-      { file, line: loc.line, column: loc.column, source }
+      { code: 'LQ-104', file, line: loc.line, column: loc.column, source }
     );
   }
 
@@ -397,7 +415,7 @@ export function parse(tokens, options = {}) {
 
     throw new LiquidSyntaxError(
       `Unexpected keyword '${kw}' outside supported structure.`,
-      { file, line: loc.line, column: loc.column, source }
+      { code: 'LQ-108', file, line: loc.line, column: loc.column, source }
     );
   }
 

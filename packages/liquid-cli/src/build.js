@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
-import { compile } from 'liquid-compiler';
+import { compile } from '@mkdevofficial/liquid-compiler';
 import { printBanner } from './banner.js';
 
 /**
@@ -132,24 +132,34 @@ export async function buildCommand(options = {}) {
 }
 
 function resolvePackageDir(pkgName, rootDir) {
+  const unscope = pkgName.replace(/^@[^/]+\//, '');
   // Check rootDir and parent directories for node_modules/pkgName
   let cur = rootDir;
   while (cur) {
-    const candidate = path.join(cur, 'node_modules', pkgName);
+    let candidate = path.join(cur, 'node_modules', pkgName);
+    if (fs.existsSync(candidate)) return candidate;
+    candidate = path.join(cur, 'node_modules', unscope);
     if (fs.existsSync(candidate)) return candidate;
     const parent = path.dirname(cur);
     if (parent === cur) break;
     cur = parent;
   }
+  // Sibling in monorepo
+  const cliDir = path.dirname(new URL(import.meta.url).pathname);
+  const sibling = path.resolve(cliDir, '../../', unscope);
+  if (fs.existsSync(sibling)) return sibling;
+
   // Fallback relative to liquid-cli package
-  const fallback = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../..', 'node_modules', pkgName);
+  const fallback = path.resolve(cliDir, '../../..', 'node_modules', pkgName);
   if (fs.existsSync(fallback)) return fallback;
+  const fallbackUnscope = path.resolve(cliDir, '../../..', 'node_modules', unscope);
+  if (fs.existsSync(fallbackUnscope)) return fallbackUnscope;
   return null;
 }
 
 function buildProductionBundle({ entryPath, compiledModules, rootDir }) {
-  const runtimeDir = resolvePackageDir('liquid-runtime', rootDir);
-  const routerDir = resolvePackageDir('liquid-router', rootDir);
+  const runtimeDir = resolvePackageDir('@mkdevofficial/liquid-runtime', rootDir) || resolvePackageDir('liquid-runtime', rootDir);
+  const routerDir = resolvePackageDir('@mkdevofficial/liquid-router', rootDir) || resolvePackageDir('liquid-router', rootDir);
 
   const signalsCode = fs.readFileSync(path.join(runtimeDir, 'src/signals.js'), 'utf8');
   const domCode = fs.readFileSync(path.join(runtimeDir, 'src/dom.js'), 'utf8');

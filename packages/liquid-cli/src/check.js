@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { compile, LiquidSyntaxError } from 'liquid-compiler';
+import { compile, LiquidSyntaxError } from '@mkdevofficial/liquid-compiler';
 import { printBanner } from './banner.js';
 
 /**

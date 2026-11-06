@@ -45,3 +45,37 @@ test('Router - navigation and reactive route updates in memory', () => {
   router.navigate('/todo');
   assert.strictEqual(router.currentPath(), '/todo');
 });
+
+test('Router - RouterView re-renders when route params change for the same component (Bug 2 in router)', () => {
+  window.location.hash = '';
+  let lastParams = null;
+  const TransactionComp = (props) => {
+    lastParams = props.params;
+    const div = document.createElement('div');
+    div.textContent = `Tx: ${props.params?.id || 'new'}`;
+    return div;
+  };
+
+  const routes = [
+    { path: '/', component: TransactionComp },
+    { path: '/transaction/new', component: TransactionComp },
+    { path: '/transaction/:id', component: TransactionComp }
+  ];
+
+  const router = createRouter({ routes, mode: 'hash' });
+  const container = document.createElement('div');
+  const viewNodes = router.RouterView();
+  for (const n of viewNodes) {
+    container.appendChild(n);
+  }
+
+  assert.ok(container.innerHTML.includes('Tx: new'), 'Initial render on / should match fallback or new');
+  
+  router.navigate('/transaction/42');
+  assert.strictEqual(lastParams?.id, '42', 'RouterView must re-render and pass updated params.id="42"');
+  assert.ok(container.innerHTML.includes('Tx: 42'), 'DOM must reflect updated transaction id');
+
+  router.navigate('/transaction/99');
+  assert.strictEqual(lastParams?.id, '99', 'RouterView must re-render and pass updated params.id="99"');
+  assert.ok(container.innerHTML.includes('Tx: 99'), 'DOM must reflect updated transaction id 99');
+});

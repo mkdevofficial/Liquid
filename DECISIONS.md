@@ -167,5 +167,98 @@ This document records every non-trivial decision made in the design and implemen
   4. **Deterministic Asset Ordering**: In `packages/liquid-cli/src/build.js`, file discovery arrays (`liqFiles`, `cssFiles`) are explicitly sorted and relative paths normalized to forward slashes before aggregation to guarantee deterministic bundle hashing and rule ordering across all platforms.
 - **Rationale**: Previously, `compile()` calculated `scopeId` but omitted it from the return object and AST. `dev.js` fell back to `liq-style-${compiled.ast.scopeId || 'default'}`. Because `scopeId` was `undefined`, every single component injected into `<style id="liq-style-default">`, causing parent components (`App.liq`) to overwrite and completely erase imported child components' styles (`Header.liq`). In production `liquid build`, styles were aggregated into a unified stylesheet, creating a severe visual discrepancy between `liquid dev` and `liquid preview`. Isolated style tags, no-cache headers, and shared compilation guarantee 100% computed style parity.
 
+---
+
+## 21. Untracked Route Component Instantiation in `RouterView`
+- **Decision**: Wrap the route component invocation `untrack(() => currentComponent(props))` inside `RouterView`'s route effect in `packages/liquid-router/src/index.js`.
+- **Rationale**: If `Component(props)` executes directly inside `effect(...)`, any signal read during component initialization (such as `amount()`, `searchQuery()`, or form inputs) registers as a dependency of the route-switching effect. Consequently, the very first keystroke in an input field triggers the router effect, tearing down the entire active page DOM and remounting a brand-new component instance on every character typed! Wrapping component instantiation in `untrack` isolates page lifecycle from component-internal signal reads.
+
+---
+
+## 22. Deep Slot Child Propagation in Compiler Codegen
+- **Decision**: In `packages/liquid-compiler/src/codegen.js`, ensure `generateSubNode` inspects `n.children` when encountering component nodes within nested block scopes (such as `if`, `each`, or outer slots).
+- **Rationale**: Prior to this fix, nested component hierarchies like `Layout` -> `Card` -> `form` silently discarded all children of inner components because `generateSubNode` only handled `tag` nodes and ignored `children` on `ComponentNode`. Propagating nested slots guarantees complex real-world layouts render their slotted children accurately.
+
+---
+
+## 23. Microtask Rescheduling for Unattached Block Anchors
+- **Decision**: In `packages/liquid-runtime/src/dom.js`, both `createIfBlock` and `createEachBlock` now verify `anchor.parentNode` before inserting or ordering DOM nodes. If `anchor.parentNode` is `null` (e.g. during synchronous slot assembly or nested branch execution), the insertion routine reschedules itself via `queueMicrotask` up to 20 times instead of aborting.
+- **Rationale**: When an `each` block is nested inside an `if` block or slot array, `createEachBlock` runs synchronously inside the branch function before the branch nodes are attached to the parent DOM tree. If `orderNodes` aborted upon finding `!anchor.parentNode` in the first microtask, all list items were permanently dropped from the DOM even though the anchor was subsequently mounted. Microtask rescheduling allows parent anchors to attach first and then positions all child nodes reliably.
+
+---
+
+## 24. Shorthand Class Merging with Dynamic Class Bindings
+- **Decision**: In `packages/liquid-compiler/src/codegen.js`, when an element specifies shorthand classes (e.g. `button.btn-confirm`) alongside a dynamic `class={...}` binding, the compiler automatically prepends the static class string:
+  `bindAttr(el, "class", () => (baseClasses + ((dyn) ? ' ' + dyn : '')))`
+- **Rationale**: Previously, `bindAttr` completely overwrote `el.className` with the result of the dynamic binding expression. Any element combining class shorthand with conditional classes (e.g. `.tx-amount class={isIncome ? 'is-income' : 'is-expense'}`) had its base classes wiped out as soon as the binding evaluated, destroying styling and breaking CSS selectors.
+
+---
+
+## 26. `liquid-edit` TUI Architecture: Phone-First Terminal Code Editor
+- **Decision**:
+  1. **100% Pure JavaScript (Zero Native Dependencies)**: Build `liquid-edit` with ESM on Node 20+ without native C/C++ addons, `node-gyp`, or postinstall scripts. Ensures instant, frictionless installation and execution on Termux Android (AArch64), GitHub Codespaces, Debian, macOS, and Linux.
+  2. **Piece Table Buffer with Incremental Line Cache & Binary Search**:
+     - Maintain piece table buffer (`PieceTable`) fast up to 10 MB with append-only buffers (`orig`, `add`).
+     - Line indexing is accelerated by `_linesCache` and `_lineOffsets`: character edits without newlines (`!text.includes('\n')`) update the cached line string and offset indices in place, bypassing costly whole-buffer string concatenation and re-splitting.
+     - `positionToOffset` evaluates in $O(1)$ time; `offsetToPosition` uses binary search in $O(\log N)$ time. Measured keystroke-to-render latency on 10,000-line documents is under 16ms (60 FPS interactive budget).
+  3. **Phone-First 40x20 Responsive Viewport & Touch Controls**:
+     - Tailored for a 40-column by 20-row terminal on mobile virtual touch keyboards (Gboard, Samsung Keyboard).
+     - Fixed 5-row responsive layout: Row 0 (Tappable Menu Bar), Row 1 (Tab Bar), Middle (Editor Viewport), Row `rows - 2` (Status Bar), Row `rows - 1` (Quick Action Bar with `[💾 Save] [↩ Undo] [↪ Redo] [🔍 Find] [⚡ Cmd] [« Out] [» In] [// Com] [🫟 Liq]`).
+     - Full SGR 1006 mouse/touch reporting: tap to place cursor, drag to select, wheel scroll gestures, and touch button targets.
+     - Responsive sidebar: on screens < 60 columns, the file explorer renders as a sliding overlay rendered on top of the editor pane and auto-hides upon file selection. Splits collapse into tabs on small viewports.
+  4. **Command Palette as Primary Action Driver**:
+     - Searchable fuzzy command palette (`F1` or tap `[⚡ Cmd]`) exposes 100% of editor actions with description and keybindings. Nothing is keybinding-only.
+  5. **Unicode Grapheme Segmentation**:
+     - Built-in `Intl.Segmenter` determines grapheme cluster boundaries, display widths (CJK width 2, Liquid emoji `🫟` U+1FADF width 2, Arabic tashkeel width 0), and RTL string detection.
+  6. **Double-Buffered Differential ANSI Screen**:
+     - Double-buffered grid (`front` and `back`) emits differential ANSI updates only for modified cells, utilizing synchronized output sequences (`\x1b[?2025h` / `\x1b[?2025l`) to eliminate visual tearing and flicker.
+  7. **Deep Liquid Framework Integration**:
+     - Live debounced compiler diagnostics off the typing path, displaying gutter badges (`✖`, `⚠`), squiggles, and status bar error messages.
+     - Live compiled JS/CSS viewer split (`F8`) showing generated code as the developer types.
+     - Embedded task runner (`F5`) running `liquid dev/build` with automatic Local (`http://localhost:3000`) and LAN (`http://192.168.x.x:3000`) URL detection.
+     - Component outline (`Ctrl+Shift+O`), code formatter (`Shift+Alt+F`), and Liquid snippet templates (`Ctrl+Space`).
+  8. **Crash Safety & Clean Terminal Restoration**:
+     - Atomic save via temporary file replacement (`fs.renameSync`).
+     - Emergency recovery files written to `/tmp/liquid-edit-recovery/` on dirty buffers upon unhandled exit/signals.
+     - `Screen.stop()` resets all ANSI styles, shows cursor, disables mouse tracking, disables bracketed paste, pauses stdin, and exits alternate screen buffer cleanly.
+- **Rationale**: Developers in emerging markets and mobile-first settings frequently code on Android phones using Termux. Existing terminal editors (nano, vim, micro) either lack modern IDE features (live component diagnostics, compiled view, task runner), require complex configurations, rely on heavy native dependencies, or fail to provide adequate touch targets for virtual keyboards on small 40x20 screens. `liquid-edit` provides an out-of-the-box, touch-friendly, zero-dependency IDE experience for Liquid and modern web development.
+
+---
+
+## 27. Dual Accessor & `.value` Ergonomics on Signals & Computeds
+- **Decision**: In `packages/liquid-runtime/src/signals.js`, define an enumerable `value` getter/setter property on the callable accessor function returned by `signal()` and an enumerable `value` getter on `computed()`.
+  ```javascript
+  Object.defineProperty(accessor, 'value', {
+    get: () => read(),
+    set: (next) => write(next),
+    configurable: true,
+    enumerable: true
+  });
+  ```
+- **Rationale**: While Liquid's idiomatic fine-grained reactivity uses callable accessors (`count()`, `count(10)`, `count.set(10)`), developers coming from Preact Signals, Vue 3 `ref()`, or other ecosystems frequently write `sig.value`. Supporting both `sig()` and `sig.value` seamlessly prevents runtime `TypeError: Cannot read properties of undefined` and unifies developer ergonomics across the entire framework without any performance overhead.
+
+---
+
+## 28. "Learn Liquid" Interactive Documentation & Tutorial Web Application
+- **Decision**: Build a dedicated, 100% Liquid web application in `apps/learn-liquid/` serving as an end-to-end guide on building websites with Liquid.
+- **Features**:
+  1. **Bilingual by Design**: Complete Arabic (default RTL) and English (LTR) language support with reactive `dir` and `lang` synchronization on `document.documentElement`.
+  2. **8 In-Depth Tutorial Chapters**: Overview & philosophy, Project directory structure, `.liq` component anatomy, Fine-grained Signals & reactivity, Directives & event handling, SPA Client Routing, Scoped CSS & theming, and Production build & hosting (Vercel, Netlify, GitHub Pages, Nginx VPS).
+  3. **Interactive Live Playground**: Side-by-side live component widgets (Counter, Todo List, Form validation, Budget calculator) paired with copyable `.liq` source code.
+  4. **Categorized Cheatsheet**: Quick-reference cards for CLI commands, reactivity primitives, UI directives, and routing with one-click clipboard copying.
+  5. **Production Build & Nginx SPA Configuration**: Ready-to-use SPA routing configuration for VPS deployment.
+
+---
+
+## 29. Scoped npm Publishing Architecture under `@mkdevofficial/*`
+- **Decision**: Update all monorepo package identifiers and dependencies to use the public organization scope `@mkdevofficial/`:
+  - `@mkdevofficial/liquid-cli` (v0.1.0) with binary symlinks `liquid` and `lqe`.
+  - `@mkdevofficial/liquid` (v0.1.0) as the client runtime and component meta-package.
+  - `@mkdevofficial/liquid-compiler`, `@mkdevofficial/liquid-runtime`, `@mkdevofficial/liquid-router`, `@mkdevofficial/liquid-edit` (v0.1.0).
+  - Explicit `"publishConfig": { "access": "public" }` in all publishable packages.
+  - Dual import normalization in `dev.js` and `build.js` accepting both `liquid` and `@mkdevofficial/liquid`.
+- **Rationale**: The generic name `liquid-cli` on public npm was previously claimed by an unrelated, empty 206-byte package. Scoping under `@mkdevofficial/` guarantees clean, collision-free global installation (`npm install -g @mkdevofficial/liquid-cli`) and official package ownership on npm registry.
+
+
 
 

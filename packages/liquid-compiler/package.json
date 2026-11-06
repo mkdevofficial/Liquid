@@ -1,6 +1,6 @@
 {
-  "name": "liquid-compiler",
-  "version": "1.0.0",
+  "name": "@mkdevofficial/liquid-compiler",
+  "version": "0.2.0",
   "description": "🫟 Compiler for the Liquid frontend framework",
   "type": "module",
   "main": "src/index.js",
@@ -10,6 +10,9 @@
   "files": [
     "src"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "liquid",
     "compiler",

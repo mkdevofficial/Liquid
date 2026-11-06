@@ -163,7 +163,9 @@ export function listen(el, eventName, handler, modifiers = []) {
     if (hasStop) e.stopPropagation();
 
     // Event handlers must execute untracked so they never subscribe ambient effects
-    untrack(() => handler(e));
+    if (typeof handler === 'function') {
+      untrack(() => handler(e));
+    }
   }
 
   el.addEventListener(eventName, wrappedListener, { once: hasOnce });
@@ -233,6 +235,7 @@ export function createIfBlock(anchor, conditionFn, thenFn, elseFn = null) {
   let currentScope = null;
   let currentNodes = [];
   let currentBranch = null; // true, false, or null
+  let isDestroyed = false;
 
   function cleanup() {
     if (currentScope) {
@@ -248,6 +251,7 @@ export function createIfBlock(anchor, conditionFn, thenFn, elseFn = null) {
   }
 
   effect(() => {
+    if (isDestroyed) return;
     const condition = Boolean(conditionFn());
     if (condition === currentBranch) {
       return; // no branch change
@@ -263,12 +267,16 @@ export function createIfBlock(anchor, conditionFn, thenFn, elseFn = null) {
         const nodes = Array.isArray(result) ? result : [result];
         currentNodes = nodes;
 
+        let retryCount = 0;
         const insertNodes = () => {
+          if (isDestroyed || currentNodes !== nodes) return;
           const parent = anchor.parentNode;
           if (parent) {
             for (const n of nodes) {
               if (n) parent.insertBefore(n, anchor);
             }
+          } else if (retryCount++ < 20) {
+            queueMicrotask(insertNodes);
           }
         };
 
@@ -281,7 +289,10 @@ export function createIfBlock(anchor, conditionFn, thenFn, elseFn = null) {
     }
   });
 
-  onDestroy(cleanup);
+  onDestroy(() => {
+    isDestroyed = true;
+    cleanup();
+  });
 }
 
 /**
@@ -294,6 +305,7 @@ export function createIfBlock(anchor, conditionFn, thenFn, elseFn = null) {
  */
 export function createEachBlock(anchor, listFn, keyFn, renderItemFn) {
   let itemsMap = new Map(); // key -> { scope, nodes, itemSignal, indexSignal }
+  let isDestroyed = false;
 
   function cleanup() {
     for (const { scope, nodes } of itemsMap.values()) {
@@ -306,6 +318,7 @@ export function createEachBlock(anchor, listFn, keyFn, renderItemFn) {
   }
 
   effect(() => {
+    if (isDestroyed) return;
     const rawList = listFn() ?? [];
     let list;
 
@@ -380,13 +393,21 @@ export function createEachBlock(anchor, listFn, keyFn, renderItemFn) {
     }
 
     // Third pass: position nodes in correct DOM order before anchor
+    let retryCount = 0;
+    const currentOrder = newOrder;
     const orderNodes = () => {
+      if (isDestroyed) return;
       const parent = anchor.parentNode;
-      if (!parent) return;
+      if (!parent) {
+        if (retryCount++ < 20) {
+          queueMicrotask(orderNodes);
+        }
+        return;
+      }
 
       let cursor = anchor;
-      for (let i = newOrder.length - 1; i >= 0; i--) {
-        const { nodes } = newOrder[i];
+      for (let i = currentOrder.length - 1; i >= 0; i--) {
+        const { nodes } = currentOrder[i];
         for (let j = nodes.length - 1; j >= 0; j--) {
           const n = nodes[j];
           if (n.nextSibling !== cursor) {
@@ -406,7 +427,10 @@ export function createEachBlock(anchor, listFn, keyFn, renderItemFn) {
     itemsMap = newItemsMap;
   });
 
-  onDestroy(cleanup);
+  onDestroy(() => {
+    isDestroyed = true;
+    cleanup();
+  });
 }
 
 /**

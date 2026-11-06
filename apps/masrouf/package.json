@@ -1,0 +1,15 @@
+{
+  "name": "masrouf",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "liquid dev",
+    "build": "liquid build",
+    "preview": "liquid preview",
+    "check": "liquid check"
+  },
+  "dependencies": {
+    "liquid": "^1.0.0"
+  }
+}

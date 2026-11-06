@@ -6,11 +6,13 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "examples/*"
+    "examples/*",
+    "apps/*"
   ],
   "scripts": {
     "test": "node --test tests/*.test.js packages/*/tests/*.test.js packages/*/tests/**/*.test.js",
-    "check": "node packages/liquid-cli/bin/liquid.js check"
+    "check": "node packages/liquid-cli/bin/liquid.js check",
+    "publish:all": "npm publish --workspaces --access public"
   },
   "devDependencies": {
     "happy-dom": "^17.1.6"

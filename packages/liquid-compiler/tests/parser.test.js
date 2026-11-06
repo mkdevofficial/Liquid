@@ -87,3 +87,19 @@ each items() as item, idx (item.id)
   assert.strictEqual(eachBlock.children.length, 1);
   assert.strictEqual(eachBlock.children[0].tag, 'li');
 });
+
+test('Parser - each blocks with wrapped outer parentheses', () => {
+  const src = `
+each (items() as item (item.id))
+  li.item {item.title}
+`;
+  const tokens = tokenize(src);
+  const ast = parse(tokens, { source: src });
+
+  assert.strictEqual(ast.template.length, 1);
+  const eachBlock = ast.template[0];
+  assert.strictEqual(eachBlock.type, 'EachBlock');
+  assert.strictEqual(eachBlock.collection, 'items()');
+  assert.strictEqual(eachBlock.item, 'item');
+  assert.strictEqual(eachBlock.key, 'item.id');
+});

@@ -104,3 +104,82 @@ div
   assert.strictEqual(result.code.includes('effect(() => { listen'), false, 'listen must not be inside an effect');
   assert.strictEqual(result.code.includes('bindAttr(_el1, "click"'), false, 'click must not be compiled as attribute');
 });
+
+test('Compiler - multi-line import statements are kept top-level and not placed inside function body (Bug 3)', () => {
+  const source = `--- logic
+import Layout from './Layout.liq';
+import {
+  signal,
+  computed,
+  effect
+} from 'liquid';
+
+const value = signal(42);
+
+--- ui
+div
+  span {value()}
+`;
+
+  const result = compile(source, { file: 'MultiImport.liq' });
+  const lines = result.code.split('\n');
+  const funcIdx = lines.findIndex(l => l.includes('export default function MultiImport'));
+  assert.ok(funcIdx > 0, 'Component function must be defined');
+
+  // Verify all parts of multi-line import appear BEFORE the function definition
+  const importEndIdx = lines.findIndex((l, idx) => idx > 0 && l.includes('} from'));
+  assert.ok(importEndIdx > 0, 'Closing brace of import must exist');
+  assert.ok(importEndIdx < funcIdx, 'Multi-line import must end BEFORE component function definition');
+
+  // Verify function body only contains the user statement
+  const bodyAfterFunc = lines.slice(funcIdx).join('\n');
+  assert.ok(!bodyAfterFunc.includes("from 'liquid'"), 'Function body must not contain import statements');
+  assert.ok(bodyAfterFunc.includes('const value = signal(42);'), 'Function body must contain user statements');
+});
+
+test('Compiler - compiles standalone event modifiers without explicit handler', () => {
+  const source = `
+div.card @click.stop
+  button @click.prevent Submit
+`;
+  const result = compile(source, { file: 'Modifiers.liq' });
+  assert.ok(result.code.includes('listen(_el0, "click", () => {}, ["stop"])'));
+  assert.ok(result.code.includes('listen(_el1, "click", () => {}, ["prevent"])'));
+});
+
+test('Compiler - preserves slots for nested components inside slots and blocks (Bug 6)', () => {
+  const source = `
+Layout
+  Card
+    form
+      button Submit
+`;
+  const result = compile(source, { file: 'Nested.liq' });
+  // Verify Layout has a default slot containing Card
+  assert.ok(result.code.includes('Layout({ default: () => {'), 'Layout should have default slot');
+  // Verify Card ALSO has a default slot containing form
+  assert.ok(result.code.includes('Card({ default: () => {'), 'Nested Card should have default slot');
+  assert.ok(result.code.includes('element("form"'), 'Card slot should contain form element');
+});
+
+test('Compiler - each loop proxy allows method invocation on primitive items (Bug 8)', () => {
+  const source = `
+div
+  each months as m (m)
+    span {m.split('-')[0]}
+`;
+  const result = compile(source, { file: 'EachProxy.liq' });
+  assert.ok(result.code.includes('prop in Object(val)'), 'Proxy must allow property/method lookups on primitives');
+});
+
+test('Compiler - merges shorthand class with dynamic and static class attribute (Bug 10)', () => {
+  const source = `
+button.btn-confirm class={danger ? 'btn-danger' : ''}
+`;
+  const result = compile(source, { file: 'ClassMerge.liq' });
+  assert.ok(result.code.includes('"btn-confirm" + ((danger ? \'btn-danger\' : \'\')'), 'Must merge shorthand class with dynamic class binding');
+});
+
+
+
+

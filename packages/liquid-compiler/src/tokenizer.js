@@ -81,7 +81,7 @@ export function tokenize(source, options = {}) {
       } else {
         throw new LiquidSyntaxError(
           `Unknown section header '--- ${rawName}'. Valid sections are '--- logic', '--- style', or '--- ui'.`,
-          { file, line: lineNumber, column: 1, source }
+          { code: 'LQ-102', file, line: lineNumber, column: 1, source }
         );
       }
 
@@ -116,14 +116,14 @@ export function tokenize(source, options = {}) {
       const firstTab = leadingWhitespace.indexOf('\t') + 1;
       throw new LiquidSyntaxError(
         'Mixed tabs and spaces in indentation are not allowed. Please use spaces only (2 spaces per indent level).',
-        { file, line: lineNumber, column: firstTab, source }
+        { code: 'LQ-101', file, line: lineNumber, column: firstTab, source }
       );
     }
 
     if (hasTabs) {
       throw new LiquidSyntaxError(
         'Tab characters in indentation are not allowed. Please use 2 spaces per indentation level.',
-        { file, line: lineNumber, column: 1, source }
+        { code: 'LQ-101', file, line: lineNumber, column: 1, source }
       );
     }
 
@@ -134,7 +134,7 @@ export function tokenize(source, options = {}) {
       if (indentWidth !== currentIndent + 2) {
         throw new LiquidSyntaxError(
           `Invalid indentation (${indentWidth} spaces). Expected ${currentIndent + 2} spaces (2 spaces per level).`,
-          { file, line: lineNumber, column: currentIndent + 1, source }
+          { code: 'LQ-103', file, line: lineNumber, column: currentIndent + 1, source }
         );
       }
       indentStack.push(indentWidth);
@@ -157,7 +157,7 @@ export function tokenize(source, options = {}) {
       if (indentStack[indentStack.length - 1] !== indentWidth) {
         throw new LiquidSyntaxError(
           `Indentation level of ${indentWidth} spaces does not match any outer indentation level.`,
-          { file, line: lineNumber, column: 1, source }
+          { code: 'LQ-103', file, line: lineNumber, column: 1, source }
         );
       }
     }
@@ -277,7 +277,7 @@ function tokenizeUILine(lineContent, line, colOffset, tokens, file, source) {
     if (!seg) {
       throw new LiquidSyntaxError(
         `Expected identifier after '${prefix}' in shorthand.`,
-        { file, line, column: colOffset + segStart, source }
+        { code: 'LQ-107', file, line, column: colOffset + segStart, source }
       );
     }
     if (prefix === '#') {

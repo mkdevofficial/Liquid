@@ -1,10 +1,11 @@
 {
-  "name": "liquid-cli",
-  "version": "1.0.0",
+  "name": "@mkdevofficial/liquid-cli",
+  "version": "0.2.0",
   "description": "🫟 CLI and development server for the Liquid frontend framework",
   "type": "module",
   "bin": {
-    "liquid": "./bin/liquid.js"
+    "liquid": "bin/liquid.js",
+    "lqe": "bin/lqe.js"
   },
   "main": "src/index.js",
   "exports": {
@@ -12,12 +13,18 @@
   },
   "files": [
     "bin",
-    "src"
+    "src",
+    "templates",
+    "guide-dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
-    "liquid-compiler": "^1.0.0",
-    "liquid-runtime": "^1.0.0",
-    "liquid-router": "^1.0.0"
+    "@mkdevofficial/liquid-compiler": "^0.2.0",
+    "@mkdevofficial/liquid-runtime": "^0.2.0",
+    "@mkdevofficial/liquid-router": "^0.2.0",
+    "@mkdevofficial/liquid-edit": "^0.2.0"
   },
   "license": "MIT"
 }

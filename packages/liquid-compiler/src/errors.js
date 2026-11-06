@@ -1,11 +1,12 @@
 /**
- * Liquid Syntax Error with line/column/caret excerpts.
+ * Liquid Syntax Error with line/column/caret excerpts and diagnostic Error IDs.
  */
 export class LiquidSyntaxError extends Error {
-  constructor(message, { file = 'anonymous.liq', line = 1, column = 1, source = '' } = {}) {
-    const formatted = formatExcerpt({ message, file, line, column, source });
+  constructor(message, { code = 'LQ-100', file = 'anonymous.liq', line = 1, column = 1, source = '' } = {}) {
+    const formatted = formatExcerpt({ message, code, file, line, column, source });
     super(formatted);
     this.name = 'LiquidSyntaxError';
+    this.code = code;
     this.rawMessage = message;
     this.file = file;
     this.line = line;
@@ -14,7 +15,7 @@ export class LiquidSyntaxError extends Error {
   }
 }
 
-export function formatExcerpt({ message, file = 'anonymous.liq', line = 1, column = 1, source = '' }) {
+export function formatExcerpt({ message, code = 'LQ-100', file = 'anonymous.liq', line = 1, column = 1, source = '' }) {
   const lines = source.split(/\r?\n/);
   const targetLineIdx = line - 1;
 
@@ -23,7 +24,8 @@ export function formatExcerpt({ message, file = 'anonymous.liq', line = 1, colum
 
   const maxLineNumWidth = String(endIdx + 1).length;
 
-  const header = `\n🫟 Liquid Syntax Error: ${message}\n  --> ${file}:${line}:${column}\n`;
+  const docUrl = `http://localhost:4000/#/errors?id=${code}`;
+  const header = `\n🫟 Liquid Syntax Error [${code}]: ${message}\n  --> ${file}:${line}:${column}\n  📖 Guide & Fix: ${docUrl}\n`;
   const gutterPad = ' '.repeat(maxLineNumWidth);
 
   const excerptLines = [];

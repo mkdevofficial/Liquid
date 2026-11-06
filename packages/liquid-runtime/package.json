@@ -1,6 +1,6 @@
 {
-  "name": "liquid-runtime",
-  "version": "1.0.0",
+  "name": "@mkdevofficial/liquid-runtime",
+  "version": "0.2.0",
   "description": "🫟 Fine-grained reactive runtime for Liquid",
   "type": "module",
   "main": "src/index.js",
@@ -10,6 +10,9 @@
   "files": [
     "src"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "liquid",
     "signals",

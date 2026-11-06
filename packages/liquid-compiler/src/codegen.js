@@ -32,11 +32,21 @@ export function generate(ast, analysis, options = {}) {
   const userImports = [];
   const userBody = [];
 
+  let inMultiLineImport = false;
   for (let idx = 0; idx < logicLines.length; idx++) {
     const line = logicLines[idx];
     const trimmed = line.trim();
-    if (trimmed.startsWith('import ') || trimmed.startsWith('import{')) {
+
+    if (inMultiLineImport) {
       userImports.push(line);
+      if (/['"][^'"]+['"]\s*;?$/.test(trimmed)) {
+        inMultiLineImport = false;
+      }
+    } else if (trimmed.startsWith('import ') || trimmed.startsWith('import{')) {
+      userImports.push(line);
+      if (!/['"][^'"]+['"]\s*;?$/.test(trimmed)) {
+        inMultiLineImport = true;
+      }
     } else {
       userBody.push({ text: line, lineNum: ast.logic.line + idx });
     }
@@ -180,10 +190,20 @@ export function generate(ast, analysis, options = {}) {
       if (attr.isBoolean) {
         bodyLines.push(`  ${elVar}.setAttribute(${JSON.stringify(attr.name)}, '');`);
       } else if (!attr.isDynamic) {
-        bodyLines.push(`  ${elVar}.setAttribute(${JSON.stringify(attr.name)}, ${JSON.stringify(attr.value)});`);
+        if (attr.name === 'class' && node.classes.length > 0) {
+          const combined = node.classes.join(' ') + (attr.value ? ' ' + attr.value : '');
+          bodyLines.push(`  ${elVar}.setAttribute('class', ${JSON.stringify(combined)});`);
+        } else {
+          bodyLines.push(`  ${elVar}.setAttribute(${JSON.stringify(attr.name)}, ${JSON.stringify(attr.value)});`);
+        }
       } else {
         usedRuntimeHelpers.add('bindAttr');
-        bodyLines.push(`  bindAttr(${elVar}, ${JSON.stringify(attr.name)}, () => (${attr.value}));`);
+        if (attr.name === 'class' && node.classes.length > 0) {
+          const baseClasses = JSON.stringify(node.classes.join(' '));
+          bodyLines.push(`  bindAttr(${elVar}, "class", () => (${baseClasses} + ((${attr.value}) ? ' ' + (${attr.value}) : '')));`);
+        } else {
+          bodyLines.push(`  bindAttr(${elVar}, ${JSON.stringify(attr.name)}, () => (${attr.value}));`);
+        }
       }
     }
 
@@ -191,10 +211,13 @@ export function generate(ast, analysis, options = {}) {
     for (const ev of node.events) {
       usedRuntimeHelpers.add('listen');
       const mods = ev.modifiers.length > 0 ? JSON.stringify(ev.modifiers) : '[]';
-      // If handler is an expression with parentheses or assignment, wrap in function
-      const handlerExpr = /[\(\)=]/.test(ev.handler) && !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(ev.handler)
-        ? `(e) => { ${ev.handler}; }`
-        : ev.handler;
+      const rawHandler = (ev.handler || '').trim();
+      // If handler is empty, use a no-op function (common with standalone modifiers like @click.stop)
+      const handlerExpr = !rawHandler
+        ? '() => {}'
+        : (/[\(\)=]/.test(rawHandler) && !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(rawHandler)
+          ? `(e) => { ${rawHandler}; }`
+          : rawHandler);
       bodyLines.push(`  listen(${elVar}, ${JSON.stringify(ev.name)}, ${handlerExpr}, ${mods});`);
     }
 
@@ -301,7 +324,11 @@ export function generate(ast, analysis, options = {}) {
           return () => target();
         }
         const val = target();
-        return typeof val === 'object' && val !== null ? val[prop] : val;
+        if (val != null && prop in Object(val)) {
+          const res = val[prop];
+          return typeof res === 'function' ? res.bind(val) : res;
+        }
+        return val;
       },
       apply(target) { return target(); }
     });
@@ -309,7 +336,12 @@ export function generate(ast, analysis, options = {}) {
       apply(target) { return target(); },
       get(target, prop) {
         if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') return () => target();
-        return target[prop];
+        const val = target();
+        if (val != null && prop in Object(val)) {
+          const res = val[prop];
+          return typeof res === 'function' ? res.bind(val) : res;
+        }
+        return val;
       }
     });`;
 
@@ -386,8 +418,24 @@ ${eachSubLines.map(l => '    ' + l).join('\n')}
           const val = attr.isDynamic ? attr.value : JSON.stringify(attr.value);
           propsObj.push(`${JSON.stringify(attr.name)}: ${val}`);
         }
+        if (n.children.length > 0) {
+          const slotChildrenVar = nextVar('_slot');
+          const slotBody = [];
+          slotBody.push(`() => {`);
+          slotBody.push(`  const ${slotChildrenVar} = [];`);
+          const subLines = [];
+          generateSubtreeInto(n.children, slotChildrenVar, subLines);
+          slotBody.push(...subLines.map(l => '  ' + l));
+          slotBody.push(`  return ${slotChildrenVar};`);
+          slotBody.push(`}`);
+          propsObj.push(`default: ${slotBody.join('\n')}`);
+        }
         buf.push(`const ${compVar} = ${n.tag}({ ${propsObj.join(', ')} });`);
-        buf.push(`if (Array.isArray(${compVar})) ${parent}.push(...${compVar}); else if (${compVar}) ${parent}.push(${compVar});`);
+        if (isRootSub) {
+          buf.push(`if (Array.isArray(${compVar})) ${parent}.push(...${compVar}); else if (${compVar}) ${parent}.push(${compVar});`);
+        } else {
+          buf.push(`if (Array.isArray(${compVar})) append(${parent}, ...${compVar}); else if (${compVar}) append(${parent}, ${compVar});`);
+        }
       } else {
         const elVar = nextVar('_el');
         const classList = n.classes.length > 0 ? JSON.stringify(n.classes) : 'null';
@@ -398,18 +446,31 @@ ${eachSubLines.map(l => '    ' + l).join('\n')}
           if (attr.isBoolean) {
             buf.push(`${elVar}.setAttribute(${JSON.stringify(attr.name)}, '');`);
           } else if (!attr.isDynamic) {
-            buf.push(`${elVar}.setAttribute(${JSON.stringify(attr.name)}, ${JSON.stringify(attr.value)});`);
+            if (attr.name === 'class' && n.classes.length > 0) {
+              const combined = n.classes.join(' ') + (attr.value ? ' ' + attr.value : '');
+              buf.push(`${elVar}.setAttribute('class', ${JSON.stringify(combined)});`);
+            } else {
+              buf.push(`${elVar}.setAttribute(${JSON.stringify(attr.name)}, ${JSON.stringify(attr.value)});`);
+            }
           } else {
             usedRuntimeHelpers.add('bindAttr');
-            buf.push(`bindAttr(${elVar}, ${JSON.stringify(attr.name)}, () => (${attr.value}));`);
+            if (attr.name === 'class' && n.classes.length > 0) {
+              const baseClasses = JSON.stringify(n.classes.join(' '));
+              buf.push(`bindAttr(${elVar}, "class", () => (${baseClasses} + ((${attr.value}) ? ' ' + (${attr.value}) : '')));`);
+            } else {
+              buf.push(`bindAttr(${elVar}, ${JSON.stringify(attr.name)}, () => (${attr.value}));`);
+            }
           }
         }
         for (const ev of n.events) {
           usedRuntimeHelpers.add('listen');
           const mods = ev.modifiers.length > 0 ? JSON.stringify(ev.modifiers) : '[]';
-          const handlerExpr = /[\(\)=]/.test(ev.handler) && !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(ev.handler)
-            ? `(e) => { ${ev.handler}; }`
-            : ev.handler;
+          const rawHandler = (ev.handler || '').trim();
+          const handlerExpr = !rawHandler
+            ? '() => {}'
+            : (/[\(\)=]/.test(rawHandler) && !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(rawHandler)
+              ? `(e) => { ${rawHandler}; }`
+              : rawHandler);
           buf.push(`listen(${elVar}, ${JSON.stringify(ev.name)}, ${handlerExpr}, ${mods});`);
         }
         for (const bind of n.bindings) {
@@ -475,17 +536,26 @@ ${eachSubLines.map(l => '    ' + l).join('\n')}
             return () => target();
           }
           const val = target();
-          return typeof val === 'object' && val !== null ? val[prop] : val;
+          if (val != null && prop in Object(val)) {
+            const res = val[prop];
+            return typeof res === 'function' ? res.bind(val) : res;
+          }
+          return val;
         },
         apply(target) { return target(); }
       });
       const ${indexArg} = new Proxy(${indexArg}Sig, {
-      apply(target) { return target(); },
-      get(target, prop) {
-        if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') return () => target();
-        return target[prop];
-      }
-    });`;
+        apply(target) { return target(); },
+        get(target, prop) {
+          if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') return () => target();
+          const val = target();
+          if (val != null && prop in Object(val)) {
+            const res = val[prop];
+            return typeof res === 'function' ? res.bind(val) : res;
+          }
+          return val;
+        }
+      });`;
 
       buf.push(`createEachBlock(${anchorVar}, () => (${n.collection}), ${keyExpr}, (${itemArg}Sig, ${indexArg}Sig) => {
 ${itemProxySetup}

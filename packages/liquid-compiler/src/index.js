@@ -11,6 +11,7 @@ export { analyze } from './analyzer.js';
 export { transformScopedCSS } from './css.js';
 export { generate } from './codegen.js';
 export { LiquidSyntaxError, formatExcerpt } from './errors.js';
+export { ERROR_CODES, getError, getAllErrors, searchErrors } from './error-codes.js';
 
 /**
  * Standalone Liquid compiler API.

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createCommand } from '../src/create.js';
 import { checkCommand } from '../src/check.js';
 import { buildCommand } from '../src/build.js';
+import { guideCommand } from '../src/guide.js';
 import { getNetworkUrls, printServerUrls } from '../src/network.js';
 import { shouldUseEmoji, formatBanner } from '../src/banner.js';
 
@@ -112,6 +113,14 @@ test('CLI - create scaffolds a minimal project with --minimal flag', async () =>
   assert.ok(content.includes('Hello from {name()}'));
 });
 
+test('CLI - create handles nested path and derives valid npm package name', async () => {
+  const nestedPath = path.join(TMP_DIR, 'nested/my-nested-app');
+  await createCommand(nestedPath, { minimal: true });
+
+  const pkgJson = JSON.parse(fs.readFileSync(path.join(nestedPath, 'package.json'), 'utf8'));
+  assert.strictEqual(pkgJson.name, 'my-nested-app');
+});
+
 test('CLI - check validates valid .liq files', async () => {
   const projPath = path.join(TMP_DIR, 'test-app');
   const prevCwd = process.cwd();
@@ -122,5 +131,20 @@ test('CLI - check validates valid .liq files', async () => {
     assert.strictEqual(res.errors, 0);
   } finally {
     process.chdir(prevCwd);
+  }
+});
+
+test('CLI - guide command serves official guide on default port 4000', async () => {
+  const testPort = 4000;
+  const server = await guideCommand({ port: testPort, host: '127.0.0.1' });
+  assert.ok(server, 'guideCommand must return active server instance');
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${testPort}/`);
+    assert.strictEqual(res.status, 200);
+    const html = await res.text();
+    assert.ok(html.includes('id="app"'));
+  } finally {
+    await new Promise(r => server.close(r));
   }
 });

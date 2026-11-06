@@ -67,6 +67,13 @@ export function signal(initialValue, equals = Object.is) {
   accessor.peek = () => value;
   accessor.isSignal = true;
 
+  Object.defineProperty(accessor, 'value', {
+    get: () => read(),
+    set: (next) => write(next),
+    configurable: true,
+    enumerable: true
+  });
+
   return accessor;
 }
 
@@ -137,6 +144,12 @@ export function computed(computeFn, equals = Object.is) {
     return value;
   };
   accessor.isComputed = true;
+
+  Object.defineProperty(accessor, 'value', {
+    get: () => read(),
+    configurable: true,
+    enumerable: true
+  });
 
   return accessor;
 }

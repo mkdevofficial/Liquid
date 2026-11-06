@@ -1,6 +1,6 @@
 {
-  "name": "liquid-router",
-  "version": "1.0.0",
+  "name": "@mkdevofficial/liquid-router",
+  "version": "0.2.0",
   "description": "🫟 Tree-shakeable router for Liquid",
   "type": "module",
   "main": "src/index.js",
@@ -11,7 +11,10 @@
     "src"
   ],
   "dependencies": {
-    "liquid-runtime": "^1.0.0"
+    "@mkdevofficial/liquid-runtime": "^0.2.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "keywords": [
     "liquid",

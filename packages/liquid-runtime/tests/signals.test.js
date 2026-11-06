@@ -156,3 +156,22 @@ test('Signals - createScope disposes all contained effects and cleanups', () => 
   count.set(2);
   assert.strictEqual(effectRan, 2);
 });
+
+test('Signals - property .value reads, writes, and reactively tracks', () => {
+  const count = signal(10);
+  const double = computed(() => count.value * 2);
+
+  assert.strictEqual(count.value, 10);
+  assert.strictEqual(double.value, 20);
+
+  let observed = null;
+  effect(() => {
+    observed = double.value;
+  });
+  assert.strictEqual(observed, 20);
+
+  count.value = 25;
+  assert.strictEqual(count.value, 25);
+  assert.strictEqual(double.value, 50);
+  assert.strictEqual(observed, 50);
+});

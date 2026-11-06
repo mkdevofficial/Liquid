@@ -1,7 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { compile, LiquidSyntaxError } from 'liquid-compiler';
+import { compile, LiquidSyntaxError } from '@mkdevofficial/liquid-compiler';
 import { printBanner } from './banner.js';
 import { printServerUrls } from './network.js';
 
@@ -536,9 +536,14 @@ function serveJavaScript(filePath, res) {
 }
 
 function resolvePackageDir(pkgName, rootDir) {
+  const unscope = pkgName.replace(/^@[^/]+\//, '');
   let cur = rootDir;
   while (cur) {
-    const candidate = path.join(cur, 'node_modules', pkgName);
+    let candidate = path.join(cur, 'node_modules', pkgName);
+    if (fs.existsSync(candidate)) return candidate;
+    candidate = path.join(cur, 'node_modules', `@mkdevofficial/${unscope}`);
+    if (fs.existsSync(candidate)) return candidate;
+    candidate = path.join(cur, 'node_modules', unscope);
     if (fs.existsSync(candidate)) return candidate;
     const parent = path.dirname(cur);
     if (parent === cur) break;
@@ -547,12 +552,16 @@ function resolvePackageDir(pkgName, rootDir) {
 
   // Monorepo support: check sibling packages relative to liquid-cli
   const cliDir = path.dirname(new URL(import.meta.url).pathname);
-  const siblingPkg = path.resolve(cliDir, '../../', pkgName);
+  const siblingPkg = path.resolve(cliDir, '../../', unscope);
   if (fs.existsSync(siblingPkg)) return siblingPkg;
 
   // Fallback relative to cli node_modules
   const fallback = path.resolve(cliDir, '../../..', 'node_modules', pkgName);
   if (fs.existsSync(fallback)) return fallback;
+  const fallbackScoped = path.resolve(cliDir, '../../..', 'node_modules', `@mkdevofficial/${unscope}`);
+  if (fs.existsSync(fallbackScoped)) return fallbackScoped;
+  const fallbackUnscoped = path.resolve(cliDir, '../../..', 'node_modules', unscope);
+  if (fs.existsSync(fallbackUnscoped)) return fallbackUnscoped;
 
   return null;
 }
@@ -564,8 +573,13 @@ function handleModuleRequest(pkgRequest, res, rootDir) {
 
     if (pkgRequest.includes('/')) {
       const parts = pkgRequest.split('/');
-      basePkg = parts[0];
-      subPath = parts.slice(1).join('/');
+      if (pkgRequest.startsWith('@')) {
+        basePkg = parts.slice(0, 2).join('/');
+        subPath = parts.slice(2).join('/');
+      } else {
+        basePkg = parts[0];
+        subPath = parts.slice(1).join('/');
+      }
     }
 
     const pkgDir = resolvePackageDir(basePkg, rootDir);
@@ -642,9 +656,9 @@ function handleModuleRequest(pkgRequest, res, rootDir) {
 export function rewriteBareImports(code) {
   if (typeof code !== 'string') return code;
 
-  // Rewrite from 'liquid', from 'liquid-runtime', etc.
+  // Rewrite from 'liquid', from '@mkdevofficial/liquid', etc.
   return code.replace(
-    /(from|import)\s+['"](liquid|liquid-runtime|liquid-router|liquid-compiler)(?:\/([^'"]+))?['"]/g,
+    /(from|import)\s+['"](?:@mkdevofficial\/)?(liquid|liquid-runtime|liquid-router|liquid-compiler)(?:\/([^'"]+))?['"]/g,
     (match, keyword, pkg, sub) => {
       let target;
       if (pkg === 'liquid') {

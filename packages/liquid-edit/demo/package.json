@@ -1,0 +1,13 @@
+{
+  "name": "liquid-edit-demo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "liquid dev",
+    "build": "liquid build"
+  },
+  "dependencies": {
+    "liquid-runtime": "^1.0.0"
+  }
+}

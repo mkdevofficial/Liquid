@@ -23,6 +23,7 @@ export async function createCommand(projectName, options = {}) {
   }
 
   const isMinimal = Boolean(options.minimal);
+  const pkgName = path.basename(targetDir).replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase() || 'liquid-app';
   console.log(`  Scaffolding ${isMinimal ? 'minimal' : 'standard'} project in \x1b[36m${projectName}\x1b[0m...\n`);
 
   fs.mkdirSync(path.join(targetDir, 'src/components'), { recursive: true });
@@ -30,7 +31,7 @@ export async function createCommand(projectName, options = {}) {
 
   // 1. package.json
   const pkgJson = {
-    name: projectName,
+    name: pkgName,
     version: '0.1.0',
     type: 'module',
     scripts: {
@@ -40,7 +41,7 @@ export async function createCommand(projectName, options = {}) {
       check: 'liquid check'
     },
     dependencies: {
-      liquid: '^1.0.0'
+      '@mkdevofficial/liquid': '^0.2.0'
     }
   };
   fs.writeFileSync(path.join(targetDir, 'package.json'), JSON.stringify(pkgJson, null, 2));
@@ -59,7 +60,7 @@ export async function createCommand(projectName, options = {}) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${projectName} — Liquid 🫟</title>
+    <title>${pkgName} — Liquid 🫟</title>
   </head>
   <body>
     <div id="app"></div>
