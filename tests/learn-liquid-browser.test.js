@@ -290,6 +290,58 @@ test('Liquid Documentation & Guide Website ("Learn Liquid") E2E in Chromium', as
       });
       assert.strictEqual(bossButtonExists.result.value, true, 'Boss Exam action button must exist');
 
+      // Test Episode 1 Live Compiler Validation
+      await send('Runtime.evaluate', {
+        expression: `
+          const firstEp = document.querySelectorAll('.episode-card')[0];
+          if (firstEp) firstEp.click();
+        `
+      });
+      await new Promise(r => setTimeout(r, 300));
+
+      const modalOpen = await send('Runtime.evaluate', {
+        expression: `Boolean(document.querySelector('.modal-overlay textarea'))`
+      });
+      assert.strictEqual(modalOpen.result.value, true, 'Episode 1 modal with textarea must be open');
+
+      // Fill in valid completed challenge code
+      const validCode = '--- ui\\ndiv.card\\n  h1 أهلاً بك في Liquid\\n  p ابدأ رحلتك التفاعلية هنا\\n  button.btn-start ابدأ الآن';
+      await send('Runtime.evaluate', {
+        expression: `
+          const ta = document.querySelector('textarea');
+          if (ta) {
+            ta.value = "${validCode}";
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        `
+      });
+      await new Promise(r => setTimeout(r, 100));
+
+      // Click "Verify & Live Compile"
+      await send('Runtime.evaluate', {
+        expression: `
+          const checkBtn = document.querySelector('.btn-primary-action');
+          if (checkBtn) checkBtn.click();
+        `
+      });
+      await new Promise(r => setTimeout(r, 300));
+
+      // Verify no "compile is not defined" error in feedback
+      const feedbackText = await send('Runtime.evaluate', {
+        expression: `document.querySelector('.feedback-alert') ? document.querySelector('.feedback-alert').innerText : ''`
+      });
+      assert.ok(!feedbackText.result.value.includes('compile is not defined'), 'Must NOT throw compile is not defined error');
+      assert.ok(feedbackText.result.value.includes('أحسنت صنعاً') || feedbackText.result.value.includes('XP'), `Must show success feedback (got: "${feedbackText.result.value}")`);
+
+      // Close modal
+      await send('Runtime.evaluate', {
+        expression: `
+          const closeBtn = document.querySelector('.modal-close');
+          if (closeBtn) closeBtn.click();
+        `
+      });
+      await new Promise(r => setTimeout(r, 200));
+
       // 9. Test Language Toggle (AR -> EN -> AR)
       const initialDir = await send('Runtime.evaluate', {
         expression: `document.documentElement.getAttribute('dir')`

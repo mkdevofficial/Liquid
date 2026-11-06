@@ -134,8 +134,8 @@ test('CLI - check validates valid .liq files', async () => {
   }
 });
 
-test('CLI - guide command serves official guide on default port 4000', async () => {
-  const testPort = 4000;
+test('CLI - guide command serves official guide on default port', async () => {
+  const testPort = 4005;
   const server = await guideCommand({ port: testPort, host: '127.0.0.1' });
   assert.ok(server, 'guideCommand must return active server instance');
 
@@ -150,7 +150,7 @@ test('CLI - guide command serves official guide on default port 4000', async () 
 });
 
 test('CLI - guide command with --play flag redirects to /#/play gamified arena', async () => {
-  const testPort = 4002;
+  const testPort = 4006;
   const server = await guideCommand({ port: testPort, host: '127.0.0.1', play: true });
   assert.ok(server, 'guideCommand must return active server instance');
 

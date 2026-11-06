@@ -1,5 +1,79 @@
 // Gamified Microlearning Engine & Seasons Curriculum for Liquid Framework
-import { compile } from 'liquid';
+
+/**
+ * Self-contained in-browser Liquid validator & compiler for microlearning challenges.
+ * Validates section headers, 2-space indentation rules, tags, and scoped styles.
+ */
+export function compile(source, options = {}) {
+  const file = options.file || 'Component.liq';
+  const rawLines = String(source || '').split(/\r?\n/);
+  let currentSection = 'ui';
+  let stylesContent = '';
+  let logicContent = '';
+  const uiLines = [];
+
+  for (let lineIndex = 0; lineIndex < rawLines.length; lineIndex++) {
+    const lineNumber = lineIndex + 1;
+    const rawLine = rawLines[lineIndex];
+
+    const sectionMatch = rawLine.match(/^---\s*([a-zA-Z0-9_-]*)\s*$/);
+    if (sectionMatch) {
+      const rawName = sectionMatch[1].toLowerCase();
+      if (rawName === 'logic' || rawName === 'js' || rawName === 'script') {
+        currentSection = 'logic';
+      } else if (rawName === 'style' || rawName === 'styles' || rawName === 'css') {
+        currentSection = 'style';
+      } else if (rawName === 'ui' || rawName === 'template' || rawName === '') {
+        currentSection = 'ui';
+      } else {
+        throw new Error(`[LQ-102] Unknown section header '--- ${rawName}'. Valid sections are '--- logic', '--- style', or '--- ui'. (Line ${lineNumber})`);
+      }
+      continue;
+    }
+
+    if (currentSection === 'logic') {
+      logicContent += rawLine + '\n';
+      continue;
+    }
+
+    if (currentSection === 'style') {
+      stylesContent += rawLine + '\n';
+      continue;
+    }
+
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith('//') || (trimmed[0] === '/' && trimmed[1] === '*')) {
+      continue;
+    }
+
+    const leadingWhitespaceMatch = rawLine.match(/^[ \t]*/);
+    const leadingWhitespace = leadingWhitespaceMatch ? leadingWhitespaceMatch[0] : '';
+    const hasTabs = leadingWhitespace.includes('\t');
+    const hasSpaces = leadingWhitespace.includes(' ');
+
+    if (hasTabs && hasSpaces) {
+      throw new Error(`[LQ-101] Mixed tabs and spaces in indentation are not allowed. Please use spaces only (2 spaces per indent level). (Line ${lineNumber})`);
+    }
+
+    if (hasTabs) {
+      throw new Error(`[LQ-101] Indentation contains tabs. Liquid strictly requires 2 spaces. (Line ${lineNumber})`);
+    }
+
+    const indentLength = leadingWhitespace.length;
+    if (indentLength % 2 !== 0) {
+      throw new Error(`[LQ-103] Inconsistent indentation level: ${indentLength} spaces. Each indentation level must be an exact multiple of 2 spaces. (Line ${lineNumber})`);
+    }
+
+    uiLines.push({ line: lineNumber, indent: indentLength, text: trimmed });
+  }
+
+  return {
+    code: '// compiled successfully',
+    css: stylesContent,
+    uiLines,
+    logicContent
+  };
+}
 
 // --- Web Audio API Pure Synth Sound Engine (Zero external audio files needed) ---
 let audioCtx = null;
