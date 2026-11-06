@@ -1096,6 +1096,7 @@ const translations = {
     siteTagline: 'إطار العمل الحديث وفائق الإيجاز للويب مبني على Signals وبدون Virtual DOM',
     navHome: 'الرئيسية',
     navGuide: 'الدليل التعليمي',
+    navPlay: '🎮 الأكاديمية (Play)',
     navPlayground: 'المعمل التفاعلي',
     navCheatsheet: 'مرجع الأوامر',
     navErrors: 'دليل الأخطاء',
@@ -1155,6 +1156,7 @@ const translations = {
     siteTagline: 'The ultra-concise, signal-based web framework without a Virtual DOM',
     navHome: 'Home',
     navGuide: 'Guide & Tutorial',
+    navPlay: '🎮 Arena (Play)',
     navPlayground: 'Playground',
     navCheatsheet: 'Cheatsheet',
     navErrors: 'Error Catalog',
@@ -1214,9 +1216,1035 @@ function t(key) {
   const current = translations[lang.value] || translations.ar;
   return current[key] || translations.ar[key] || key;
 }
+let audioCtx = null;
+function getAudioContext() {
+  if (typeof window === 'undefined') return null;
+  if (!audioCtx) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      audioCtx = new AudioContextClass();
+    }
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+  return audioCtx;
+}
+function playSound(type = 'success', enabled = true) {
+  if (!enabled || typeof window === 'undefined') return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    if (type === 'success') {
+      const freqs = [523.25, 659.25, 783.99, 1046.50];
+      freqs.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+        gain.gain.setValueAtTime(0.18, now + idx * 0.07);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + idx * 0.07);
+        osc.stop(now + idx * 0.07 + 0.36);
+      });
+    } else if (type === 'error') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(160, now);
+      osc.frequency.exponentialRampToValueAtTime(110, now + 0.25);
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.26);
+    } else if (type === 'levelup') {
+      const notes = [
+        { f: 523.25, t: 0.00, d: 0.12 },
+        { f: 659.25, t: 0.12, d: 0.12 },
+        { f: 783.99, t: 0.24, d: 0.12 },
+        { f: 1046.5, t: 0.38, d: 0.45 }
+      ];
+      notes.forEach(({ f, t, d }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(f, now + t);
+        gain.gain.setValueAtTime(0.25, now + t);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + t + d);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + t);
+        osc.stop(now + t + d + 0.01);
+      });
+    } else if (type === 'exam') {
+      const freqs = [392, 523.25, 659.25, 783.99, 1046.5, 1318.5];
+      freqs.forEach((f, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(f, now + i * 0.09);
+        gain.gain.setValueAtTime(0.2, now + i * 0.09);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.5);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + i * 0.09);
+        osc.stop(now + i * 0.09 + 0.52);
+      });
+    }
+  } catch (err) {
+  }
+}
+const STORAGE_KEY = 'liquid_play_profile_v1';
+function getInitialProfile() {
+  return {
+    xp: 0,
+    streak: 1,
+    soundEnabled: true,
+    completedEpisodes: {}, // { 's1-e1': true, ... }
+    passedExams: {},        // { 's1': true, ... }
+    examScores: {},         // { 's1': 100, ... }
+    unlockedSeasons: { 1: true },
+    activeSeasonId: 1
+  };
+}
+function loadProfile() {
+  if (typeof window === 'undefined') return getInitialProfile();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return getInitialProfile();
+    const data = JSON.parse(raw);
+    return { ...getInitialProfile(), ...data };
+  } catch {
+    return getInitialProfile();
+  }
+}
+function saveProfile(profile) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+  } catch {}
+}
+function getRankInfo(xp = 0) {
+  if (xp >= 3000) {
+    return { level: 5, titleAr: 'أسطورة ليكويد 👑', titleEn: 'Liquid Legend 👑', nextXp: 5000, currentBase: 3000, color: '#f59e0b' };
+  }
+  if (xp >= 1500) {
+    return { level: 4, titleAr: 'مهندس الواجهات 🏛️', titleEn: 'UI Architect 🏛️', nextXp: 3000, currentBase: 1500, color: '#8b5cf6' };
+  }
+  if (xp >= 700) {
+    return { level: 3, titleAr: 'بارع الـ Signals ⚡', titleEn: 'Reactivity Pro ⚡', nextXp: 1500, currentBase: 700, color: '#06b6d4' };
+  }
+  if (xp >= 250) {
+    return { level: 2, titleAr: 'مبرمج صاعد 🚀', titleEn: 'Rising Apprentice 🚀', nextXp: 700, currentBase: 250, color: '#10b981' };
+  }
+  return { level: 1, titleAr: 'مستكشف مبتدئ 🌱', titleEn: 'Liquid Scout 🌱', nextXp: 250, currentBase: 0, color: '#0284c7' };
+}
+const SEASONS = [
+  {
+    id: 1,
+    titleAr: 'الموسم الأول: أول قطرة — الأساسيات والصياغة الأنيقة',
+    titleEn: 'Season 1: First Drop — Foundations & Syntax',
+    badge: '💧',
+    badgeNameAr: 'شارة كشاف ليكويد',
+    badgeNameEn: 'Liquid Scout Badge',
+    descriptionAr: 'تعلم كيف تتخلص من زوائد HTML والأقواس، واكتب واجهات مستخدم فائقة الإيجاز مع مسافتين إزاحة فقط.',
+    descriptionEn: 'Say goodbye to closing tags and angle brackets. Master indent-based UI syntax in under 3 minutes per bite.',
+    totalXp: 400,
+    examThreshold: 80, // % required to pass
+    episodes: [
+      {
+        id: 's1-e1',
+        titleAr: 'قاعدة المسافات البادئة (2-Space Indent)',
+        titleEn: 'The Indentation Rule (2 Spaces)',
+        xp: 50,
+        type: 'code',
+        summaryAr: 'في Liquid الهيكل يتم تحديده بمسافتين فقط. لا وجود لأقواس الفتح والإغلاق ولا وسوم الإغلاق.',
+        summaryEn: 'In Liquid, structure is purely indentation. 2 spaces indent child elements. No <> tags.',
+        theoryAr: `في لغة Liquid، كل سطر يمثل عنصراً واحداً.
+العنصر الأب يبدأ في بداية السطر، وأي عنصر ابن يوضع تحته بإزاحة مقدارها **مسافتان بالضبط** (2 spaces).
+إذا استخدمت الـ Tab أو مسافات غير متناسقة سيرشدك المترجم فوراً بالخطأ **LQ-101**.`,
+        theoryEn: `In Liquid, each line represents one element.
+Children are indented with exactly **2 spaces**.
+Tabs or erratic indents trigger error **LQ-101**.`,
+        starterCode: `--- ui
+div.card
+  h1 أهلاً بك في Liquid
+  p ابدأ رحلتك التفاعلية هنا`,
+        challengePromptAr: 'عدل الكود أدناه لإضافة زر باسم `button.btn-start` تحته نص "ابدأ الآن" مع الالتزام التام بالإزاحة الصحيحة (مسافتان تحت div.card).',
+        challengePromptEn: 'Update the code below to add a `button.btn-start` with text "Start Now", keeping proper 2-space indentation.',
+        validate(code) {
+          try {
+            const res = compile(code);
+            const hasButton = code.includes('button.btn-start') || code.includes('button');
+            const hasProperIndent = code.match(/\n {2}button/);
+            if (!hasButton) {
+              return { success: false, msgAr: 'يجب إضافة وسم button في الكود', msgEn: 'You must add a button element' };
+            }
+            if (!hasProperIndent) {
+              return { success: false, msgAr: 'تأكد من وضع مسافتين بالضبط (2 spaces) قبل زر button ليكون ابناً لـ div.card', msgEn: 'Ensure exactly 2 spaces indent before button' };
+            }
+            return { success: true };
+          } catch (e) {
+            return { success: false, msgAr: `خطأ مترجم: ${e.message}`, msgEn: `Compiler Error: ${e.message}` };
+          }
+        }
+      },
+      {
+        id: 's1-e2',
+        titleAr: 'اختصارات الكلاس والمعرّف (.class & #id)',
+        titleEn: 'Shorthand Class & ID (.class & #id)',
+        xp: 50,
+        type: 'quiz',
+        summaryAr: 'ضع نقطة للكلاس وشباك للمعرّف ملاصقة لاسم الوسم بدون كتابة class="...".',
+        summaryEn: 'Append .class and #id directly to the tag name without attribute ceremony.',
+        theoryAr: `بدلاً من كتابة:
+\`<div class="alert alert-success" id="banner"></div>\`
+في Liquid تكتبها في سطر واحد فائق الإيجاز:
+\`div.alert.alert-success#banner مرحباً بك!\``,
+        theoryEn: `Instead of bulky HTML attributes, in Liquid you write:
+\`div.alert.alert-success#banner Welcome!\``,
+        questionAr: 'ما هي الطريقة الصحيحة لكتابة عنصر span يحمل كلاس `badge` ومعرف `primary` مع النص "جديد"؟',
+        questionEn: 'Which is the correct way to write a span with class `badge`, id `primary`, and text "New"?',
+        options: [
+          'span.badge#primary جديد',
+          'span class="badge" id="primary" جديد',
+          'span .badge #primary جديد',
+          '<span class="badge" id="primary">جديد</span>'
+        ],
+        correctIndex: 0,
+        explanationAr: 'في Liquid تلصق الكلاس والمعرف بالوسم مباشرة بدون مسافات: span.badge#primary.',
+        explanationEn: 'In Liquid, shorthand classes and IDs are chained directly to tag name.'
+      },
+      {
+        id: 's1-e3',
+        titleAr: 'حقن المتغيرات الحية {interpolation}',
+        titleEn: 'Data Interpolation {interpolation}',
+        xp: 50,
+        type: 'code',
+        summaryAr: 'استخدم الأقواس المجعدة {expression} لعرض أي تعبير جافاسكريبت داخل النص أو الخصائص.',
+        summaryEn: 'Use curly braces {expression} to evaluate and render any dynamic JS expression.',
+        theoryAr: `في أقسام UI، يمكنك تضمين أي متغير أو تعبير جافاسكريبت داخل الأقواس \`{...}\`:
+\`\`\`liquid
+--- logic
+const name = 'أحمد';
+const year = 2026;
+--- ui
+div.profile
+  h2 مرحباً {name} في عام {year}
+\`\`\``,
+        theoryEn: `Within UI sections, embed dynamic expressions inside \`{...}\`:
+\`\`\`liquid
+--- logic
+const user = 'Sara';
+--- ui
+h1 Hello {user}
+\`\`\``,
+        starterCode: `--- logic
+const framework = 'Liquid';
+const speed = 'فائق السرعة';
+--- ui
+div.hero
+  h1 {framework} هو إطار عمل
+`,
+        challengePromptAr: 'أكمل سطر الـ h1 ليصبح: `{framework} هو إطار عمل {speed}` ثم افحص النتيجة.',
+        challengePromptEn: 'Complete the h1 line to read: `{framework} is {speed}`.',
+        validate(code) {
+          try {
+            compile(code);
+            if (!code.includes('{speed}')) {
+              return { success: false, msgAr: 'تأكد من حقن التعبير {speed} داخل النص', msgEn: 'Ensure {speed} is interpolated in text' };
+            }
+            return { success: true };
+          } catch (e) {
+            return { success: false, msgAr: `خطأ ترجمة: ${e.message}`, msgEn: `Compile error: ${e.message}` };
+          }
+        }
+      },
+      {
+        id: 's1-e4',
+        titleAr: 'ربط الأحداث المباشر (@click)',
+        titleEn: 'Event Binding with @ (@click)',
+        xp: 50,
+        type: 'quiz',
+        summaryAr: 'استخدم البادئة @ متبوعة باسم الحدث (@click, @input, @submit).',
+        summaryEn: 'Prefix event names with @, such as @click, @keydown.enter, @input.',
+        theoryAr: `في Liquid، لا نحتاج لكتابة \`onclick="handleClick()"\`.
+نستخدم رمز \`@\` المباشر:
+\`\`\`liquid
+button.btn @click=saveData حفظ التعديلات
+\`\`\`
+كما يدعم Liquid معدّلات الأحداث مثل \`@click.stop\` و \`@keydown.enter\` تلقائياً!`,
+        theoryEn: `Liquid uses @ prefix for ultra-fast events:
+\`\`\`liquid
+button.btn @click=saveData Save
+\`\`\`
+Event modifiers like \`@click.prevent\` and \`@keydown.enter\` work automatically!`,
+        questionAr: 'كيف نربط دالة `toggleMenu` بحدث النقر على زر في Liquid؟',
+        questionEn: 'How do you bind the function `toggleMenu` to a button click in Liquid?',
+        options: [
+          'button @click=toggleMenu فتح القائمة',
+          'button (click)=toggleMenu فتح القائمة',
+          'button v-on:click=toggleMenu فتح القائمة',
+          'button onclick="toggleMenu()" فتح القائمة'
+        ],
+        correctIndex: 0,
+        explanationAr: 'في لغة Liquid يُكتب الحدث مباشرة بالبادئة @ كالتالي: @click=toggleMenu.',
+        explanationEn: 'Liquid binds events using the @ prefix directly.'
+      }
+    ],
+    exam: {
+      id: 's1-boss',
+      titleAr: '🏆 امتحان نهاية الموسم الأول: قطرة الإتقان',
+      titleEn: '🏆 Season 1 Boss Exam: Drop of Mastery',
+      rewardXp: 200,
+      questions: [
+        {
+          qAr: 'كم عدد المسافات البادئة الإلزامية لتعريف عنصر ابن في Liquid؟',
+          qEn: 'How many indentation spaces strictly define a child element in Liquid?',
+          options: ['مسافة واحدة (1 space)', 'مسافتان بالضبط (2 spaces)', 'أربع مسافات (4 spaces)', 'حسب رغبة المبرمج'],
+          correct: 1,
+          expAr: 'قاعدة Liquid الصارمة هي مسافتان بالضبط (2 spaces) لكل مستوى تداخل.'
+        },
+        {
+          qAr: 'أي من الأكواد التالية ينشئ زراً بالمعرف `submit-btn` والكلاس `btn-success`؟',
+          qEn: 'Which syntax creates a button with id `submit-btn` and class `btn-success`?',
+          options: ['button#submit-btn.btn-success إرسال', 'button.submit-btn#btn-success إرسال', 'button id="submit-btn" class="btn-success"', '<button id="submit-btn" class="btn-success">'],
+          correct: 0,
+          expAr: 'الكلاس يبدأ بنقطة والمعرف يبدأ بشباك: button#submit-btn.btn-success.'
+        },
+        {
+          qAr: 'ما هو كود الخطأ الذي يطلقه مترجم Liquid عند خلط الـ Tabs والمسافات؟',
+          qEn: 'Which error code is thrown when mixing tabs and spaces in indentation?',
+          options: ['LQ-101', 'LQ-202', 'LQ-301', 'LQ-404'],
+          correct: 0,
+          expAr: 'الخطأ LQ-101 هو مخصص لـ "Mixed tabs and spaces in indentation".'
+        },
+        {
+          qAr: 'ماذا يحدث إذا قمنا بتضمين تعبير متغير داخل الأقواس {2 + 3} في قالب الواجهة؟',
+          qEn: 'What happens when evaluating {2 + 3} in a Liquid template?',
+          options: ['يظهر النص الحرفي {2 + 3}', 'يتم حساب التعبير وعرض الرقم 5', 'يحدث خطأ أثناء الترجمة', 'يتم تجاهل السطر'],
+          correct: 1,
+          expAr: 'أي تعبير داخل {} هو كود JavaScript نقي يُقيّم تلقائياً.'
+        },
+        {
+          qAr: 'ما هو التنسيق الصحيح لمنع السلوك الافتراضي لنموذج Form عند إرساله؟',
+          qEn: 'How do you prevent the default event on form submit in Liquid?',
+          options: ['form @submit.prevent=handleSubmit', 'form @submit(preventDefault)=handleSubmit', 'form onsubmit="return false;"', 'form !submit=handleSubmit'],
+          correct: 0,
+          expAr: 'يدعم Liquid معدلات الأحداث المدمجة مثل @submit.prevent مباشرة.'
+        }
+      ]
+    }
+  },
+  {
+    id: 2,
+    titleAr: 'الموسم الثاني: نبض التفاعلية — الإشارات وسحر الـ Signals',
+    titleEn: 'Season 2: Reactivity Pulse — The Magic of Signals',
+    badge: '⚡',
+    badgeNameAr: 'شارة كيميائي التفاعلية',
+    badgeNameEn: 'Reactivity Alchemist Badge',
+    descriptionAr: 'اكتشف كيف يحدث Liquid عناصر DOM فقط دون Virtual DOM، وأتقن signal و computed و effect و $bind.',
+    descriptionEn: 'Master fine-grained reactivity. No virtual DOM overhead. Learn signal, computed, effect, and $bind.',
+    totalXp: 600,
+    examThreshold: 80,
+    episodes: [
+      {
+        id: 's2-e1',
+        titleAr: 'إنشاء الإشارة وقراءتها signal()',
+        titleEn: 'Creating and Reading Signals',
+        xp: 75,
+        type: 'code',
+        summaryAr: 'signal(initialValue) يعطيك دالة تقرأ قيمتها باستدعائها count() وتحدثها بـ count.value++.',
+        summaryEn: 'signal(init) creates a reactive primitive read via count() and updated via count.value++.',
+        theoryAr: `الإشارات (Signals) هي قلب Liquid:
+\`\`\`javascript
+const score = signal(10);
+console.log(score()); // قراءة: 10
+score.value += 5;     // تحديث: 15
+score.set(20);        // أو بدالة set
+\`\`\`
+عندما تتغير الإشارة، يتحدث فقط النص المحدد في المتصفح بسرعة خيالية!`,
+        theoryEn: `Signals represent fine-grained reactive state:
+\`\`\`javascript
+const score = signal(10);
+score(); // read
+score.value += 5; // write
+\`\`\``,
+        starterCode: `--- logic
+const clicks = signal(0);
+function tap() {
+  clicks.value++;
+}
+--- ui
+div.counter
+  p النقرات: {clicks()}
+  button @click=tap انقر هنا`,
+        challengePromptAr: 'تأكد من وجود الإشارة clicks ودالة tap ثم اضغط فحص الكود.',
+        challengePromptEn: 'Verify the clicks signal and tap handler, then click check.',
+        validate(code) {
+          try {
+            compile(code);
+            if (!code.includes('signal(') || !code.includes('clicks')) {
+              return { success: false, msgAr: 'يجب تعريف إشارة باسم clicks عبر signal(...)', msgEn: 'Must define clicks signal' };
+            }
+            return { success: true };
+          } catch (e) {
+            return { success: false, msgAr: `خطأ ترجمة: ${e.message}`, msgEn: `Error: ${e.message}` };
+          }
+        }
+      },
+      {
+        id: 's2-e2',
+        titleAr: 'القيم المشتقة الذكية computed()',
+        titleEn: 'Smart Derived Values computed()',
+        xp: 75,
+        type: 'quiz',
+        summaryAr: 'computed تحسب القيمة تلقائياً وتخزنها مؤقتاً (Cached) ولا تعيد الحساب إلا إذا تغيرت الإشارة الأصلية.',
+        summaryEn: 'computed derives state lazily and memoizes result until dependencies change.',
+        theoryAr: `إذا كانت لديك إشارة \`price\` وتريد حساب السعر مع الضريبة:
+\`\`\`javascript
+const price = signal(100);
+const total = computed(() => price() * 1.15);
+\`\`\`
+الدالة \`computed\` ذكية جداً: لا تعيد الحساب أبداً إلا إذا تغيرت قيمة \`price\`!`,
+        theoryEn: `computed calculates derived state automatically:
+\`\`\`javascript
+const price = signal(100);
+const total = computed(() => price() * 1.15);
+\`\`\``,
+        questionAr: 'ما هي الميزة الأساسية لـ computed() مقارنة بكتابة دالة عادية؟',
+        questionEn: 'What is the main advantage of computed() over a regular function?',
+        options: [
+          'تخزين الناتج مؤقتاً (Memoization) وعدم إعادة الحساب إلا عند تغير الإشارات المعتمدة عليها',
+          'أنها تعمل فقط داخل لغات أخرى غير JavaScript',
+          'أنها تمنع المستخدم من تحديث الصفحة',
+          'ليس هناك أي فرق بينهما'
+        ],
+        correctIndex: 0,
+        explanationAr: 'computed تقوم بالتخزين المؤقت وتتبع التبعيات بدقة ولا تعيد التنفيذ إلا عند الحاجة.',
+        explanationEn: 'computed tracks dependencies and caches results for peak performance.'
+      },
+      {
+        id: 's2-e3',
+        titleAr: 'المؤثرات الجانبية effect() ودورة الحياة',
+        titleEn: 'Side Effects & effect()',
+        xp: 75,
+        type: 'quiz',
+        summaryAr: 'effect تراقب الإشارات وتنفذ كوداً جانبياً (مثل التخزين في localStorage أو تحديث عنوان الصفحة).',
+        summaryEn: 'effect automatically runs and re-runs when any referenced signal changes.',
+        theoryAr: `عندما تحتاج لتسجيل البيانات، تحديث عنوان التبويب، أو مزامنة localStorage:
+\`\`\`javascript
+const username = signal('سارة');
+effect(() => {
+  document.title = 'مرحباً ' + username();
+});
+\`\`\`
+في كل مرة يتغير \`username\`، يُعاد تشغيل الـ effect تلقائياً!`,
+        theoryEn: `Effects run side-effects whenever referenced signals change:
+\`\`\`javascript
+effect(() => {
+  localStorage.setItem('theme', theme());
+});
+\`\`\``,
+        questionAr: 'كيف نتجنب حدوث حلقة لا نهائية (Infinite Loop LQ-202) عند قراءة إشارة داخل effect وتحديثها؟',
+        questionEn: 'How do you avoid infinite reactive loops (LQ-202) inside an effect?',
+        options: [
+          'استخدام untrack(() => signal()) لقراءة الإشارة بدون الاشتراك في مراقبتها',
+          'حذف الإشارة بالكامل من الذاكرة',
+          'وضع الـ effect داخل وسم h1',
+          'تحويل الملف إلى صيغة HTML تقليدية'
+        ],
+        correctIndex: 0,
+        explanationAr: 'تسمح دالة untrack(...) بقراءة الإشارة دون تسجيلها كتابع في الـ effect.',
+        explanationEn: 'untrack(...) reads a signal without registering a dependency.'
+      },
+      {
+        id: 's2-e4',
+        titleAr: 'الربط المزدوج الفوري $bind',
+        titleEn: 'Two-Way Binding with $bind',
+        xp: 75,
+        type: 'code',
+        summaryAr: 'توجيه $bind=mySignal يربط حقول الإدخال بالإشارة تلقائياً ذهاباً وإياباً.',
+        summaryEn: '$bind=mySignal synchronizes input value with signal bi-directionally.',
+        theoryAr: `بدلاً من ربط \`value={text()}\` وكتابة \`@input=...\`:
+\`\`\`liquid
+--- logic
+const query = signal('');
+--- ui
+div.search
+  input type="text" $bind=query placeholder="ابحث..."
+  p أنت تبحث عن: {query()}
+\`\`\`
+أي حرف يكتبه المستخدم ينتقل للإشارة، وأي تعديل برمجي ينعكس في الحقل فوراً!`,
+        theoryEn: `Effortless two-way binding:
+\`\`\`liquid
+input type="text" $bind=query
+\`\`\``,
+        starterCode: `--- logic
+const note = signal('ملاحظة أولية');
+--- ui
+div.editor
+  input type="text" $bind=note
+  p المعاينة: {note()}
+`,
+        challengePromptAr: 'تحقق من كود الربط $bind واضغط فحص لتأكيد صلاحية الربط.',
+        challengePromptEn: 'Check the $bind syntax and compile.',
+        validate(code) {
+          try {
+            compile(code);
+            if (!code.includes('$bind=')) {
+              return { success: false, msgAr: 'يجب أن يحتوي الكود على توجيه $bind=', msgEn: 'Must contain $bind= directive' };
+            }
+            return { success: true };
+          } catch (e) {
+            return { success: false, msgAr: `خطأ ترجمة: ${e.message}`, msgEn: `Compile error: ${e.message}` };
+          }
+        }
+      }
+    ],
+    exam: {
+      id: 's2-boss',
+      titleAr: '🏆 امتحان نهاية الموسم الثاني: صانع التفاعلية',
+      titleEn: '🏆 Season 2 Boss Exam: Reactivity Architect',
+      rewardXp: 300,
+      questions: [
+        {
+          qAr: 'كيف يتم تحديث قيمة إشارة count في Liquid؟',
+          qEn: 'How do you update a signal count in Liquid?',
+          options: ['count.value = 5 أو count.set(5)', 'count = 5', 'update(count, 5)', 'count.change(5)'],
+          correct: 0,
+          expAr: 'يمكن استخدام الخاصية المباشرة count.value = 5 أو الدالة count.set(5).'
+        },
+        {
+          qAr: 'ما الفرق الجوهري بين Liquid وأطر العمل مثل React في تحديث الـ DOM؟',
+          qEn: 'What is the core difference between Liquid and React in DOM updates?',
+          options: ['Liquid يحدث فقط العقدة المتأثرة مباشرة دون شجرة وهمية Virtual DOM', 'Liquid يعيد تصيير الصفحة بالكامل من الخادم', 'Liquid يتطلب بطاقة شاشة مخصصة', 'لا يوجد أي فرق تقني'],
+          correct: 0,
+          expAr: 'Liquid يستخدم Fine-grained Reactivity دقيقة تحدّث نص أو خاصية الـ DOM مباشرة وبسرعة خارقة.'
+        },
+        {
+          qAr: 'ما هو كود الخطأ الدال على وجود حلقة تفاعلية لا نهائية (Cyclic Dependency)؟',
+          qEn: 'Which error code indicates an infinite reactive loop?',
+          options: ['LQ-202', 'LQ-101', 'LQ-401', 'LQ-302'],
+          correct: 0,
+          expAr: 'الخطأ LQ-202 هو خطأ الحلقة التفاعلية اللانهائية.'
+        },
+        {
+          qAr: 'أي توجيه في Liquid يوفر الربط ثنائي الاتجاه لحقول الإدخال وصناديق الاختيار؟',
+          qEn: 'Which directive provides two-way binding in Liquid?',
+          options: ['$bind', '@bind', ':model', '#bind'],
+          correct: 0,
+          expAr: 'التوجيه المخصص في Liquid هو $bind=signalName.'
+        },
+        {
+          qAr: 'متى يتم تنفيذ الدالة الممررة إلى effect() لأول مرة؟',
+          qEn: 'When does the function passed to effect() execute for the first time?',
+          options: ['فور استدعائها مباشرة وتسجيل التبعيات', 'بعد مرور 5 ثوانٍ', 'فقط عند نقر زر الفأرة', 'لا تنفذ إلا عند إغلاق المتصفح'],
+          correct: 0,
+          expAr: 'دالة effect() تنفذ على الفور (Synchronously) لتتبع الإشارات المقروءة بداخلها.'
+        }
+      ]
+    }
+  },
+  {
+    id: 3,
+    titleAr: 'الموسم الثالث: البناء المعماري — الشروط والحلقات والمكونات',
+    titleEn: 'Season 3: Architecture — Blocks, Loops & Components',
+    badge: '🧩',
+    badgeNameAr: 'شارة مهندس المكونات',
+    badgeNameEn: 'Component Architect Badge',
+    descriptionAr: 'احترف شروط if/else وحلقات each ذات المفاتيح الفريدة واستيراد المكونات مع Props و Slots.',
+    descriptionEn: 'Master if/else branches, keyed each loops, component decomposition with props and slots.',
+    totalXp: 800,
+    examThreshold: 80,
+    episodes: [
+      {
+        id: 's3-e1',
+        titleAr: 'الشروط الذكية (if / elseif / else)',
+        titleEn: 'Conditional Blocks (if / elseif / else)',
+        xp: 100,
+        type: 'code',
+        summaryAr: 'شروط بسيطة ومعبرة بدون أقواس: if condition متبوعة بالعناصر المزاحة.',
+        summaryEn: 'Expressive conditionals: if condition followed by indented block.',
+        theoryAr: `في واجهات Liquid، تكتب الشروط بانسيابية كاملة:
+\`\`\`liquid
+--- ui
+div.panel
+  if isLoggedIn()
+    p مرحباً بك يا {user.name}
+    button @click=logout تسجيل الخروج
+  else
+    button @click=login تسجيل الدخول
+\`\`\`
+لا حوجة لأقواس أو كلمات إغلاق؛ مستوى المسافات البادئة هو الذي يحدد نطاق كل شرط!`,
+        theoryEn: `Clean indentation-based conditionals:
+\`\`\`liquid
+if condition
+  h1 Active
+else
+  h1 Inactive
+\`\`\``,
+        starterCode: `--- logic
+const score = signal(85);
+--- ui
+div.result
+  if score() >= 90
+    span.badge ممتاز 🌟
+  elseif score() >= 50
+    span.badge ناجح ✓
+  else
+    span.badge أعد المحاولة 🔄
+`,
+        challengePromptAr: 'افحص كود الشروط الثلاثية if / elseif / else واضغط على فحص الكود.',
+        challengePromptEn: 'Verify the conditional block syntax and check.',
+        validate(code) {
+          try {
+            compile(code);
+            if (!code.includes('if ') || !code.includes('else')) {
+              return { success: false, msgAr: 'يجب أن يحتوي الكود على شروط if و else', msgEn: 'Must include if and else' };
+            }
+            return { success: true };
+          } catch (e) {
+            return { success: false, msgAr: `خطأ ترجمة: ${e.message}`, msgEn: `Error: ${e.message}` };
+          }
+        }
+      },
+      {
+        id: 's3-e2',
+        titleAr: 'الحلقات السريعة فائقة الدقة (each ... (key))',
+        titleEn: 'Keyed List Loops (each ... (key))',
+        xp: 100,
+        type: 'quiz',
+        summaryAr: 'تكرار القوائم بكفاءة: each items() as item (item.id). المفتاح يمنع إعادة بناء العناصر.',
+        summaryEn: 'Efficient list loops with keys preserve DOM elements on updates.',
+        theoryAr: `صياغة حلقة التكرار في Liquid:
+\`\`\`liquid
+ul.tasks
+  each tasks() as task (task.id)
+    li.item {task.title}
+\`\`\`
+المفتاح \`(task.id)\` في نهاية السطر يضمن أن إضافة عنصر جديد لن تعيد إنشاء بقية عناصر القائمة، بل تحركها فقط في الـ DOM بأعلى كفاءة!
+تكرار المفتاح يطلق التحذير الذكي **LQ-204**.`,
+        theoryEn: `Keyed list rendering:
+\`\`\`liquid
+each items() as item (item.id)
+  li {item.name}
+\`\`\``,
+        questionAr: 'ما هي الفائدة الحيوية لكتابة المفتاح الفريد (item.id) في حلقة each؟',
+        questionEn: 'What is the vital purpose of providing a unique key (item.id) in each?',
+        options: [
+          'الحفاظ على عناصر DOM القائمة وإعادة استخدامها بدلاً من هدم القائمة وإعادة بنائها بالكامل',
+          'لتغيير لون النصوص إلى الأزرق',
+          'لإلغاء فحص الأخطاء في الكود',
+          'لتشغيل الصوت في المتصفح'
+        ],
+        correctIndex: 0,
+        explanationAr: 'المفتاح الفريد يسمح لخوارزمية المصالحة (Reconciliation) بربط كل كائن بعنصره الحقيقي في DOM بدقة مطلقة.',
+        explanationEn: 'Unique keys enable precise keyed DOM reconciliation without recreating nodes.'
+      },
+      {
+        id: 's3-e3',
+        titleAr: 'تجزئة الكود والمكونات الفرعية (Props)',
+        titleEn: 'Components & Props',
+        xp: 100,
+        type: 'code',
+        summaryAr: 'استورد أي ملف .liq واستخدمه مباشرة كوسم مع تمرير الخصائص title="...".',
+        summaryEn: 'Import any .liq file and use it as a custom tag with props.',
+        theoryAr: `في Liquid المكون هو مجرد ملف \`.liq\` آخر:
+\`\`\`liquid
+--- logic
+--- ui
+div.team
+  UserCard name="علي" role="مطور واجهات"
+  UserCard name="منى" role="مهندسة نظم"
+\`\`\`
+تصل الخصائص إلى المكون الفرعي كمُدخلات نقية يمكن الوصول إليها باسم المتغير!`,
+        theoryEn: `Components in Liquid are first-class .liq files:
+\`\`\`liquid
+--- logic
+--- ui
+Header title="My App"
+\`\`\``,
+        starterCode: `--- logic
+--- ui
+div.container
+  Card title="مشروعي الأول" category="frontend"
+`,
+        challengePromptAr: 'تحقق من صياغة استدعاء المكون وتمرير الخصائص (Props) واضغط فحص.',
+        challengePromptEn: 'Verify component invocation and props syntax.',
+        validate(code) {
+          try {
+            compile(code);
+            if (!code.includes('Card ') || !code.includes('title=')) {
+              return { success: false, msgAr: 'تأكد من تمرير الخاصية title إلى Card', msgEn: 'Pass title prop to Card' };
+            }
+            return { success: true };
+          } catch (e) {
+            return { success: false, msgAr: `خطأ ترجمة: ${e.message}`, msgEn: `Error: ${e.message}` };
+          }
+        }
+      },
+      {
+        id: 's3-e4',
+        titleAr: 'فتحات تضمين القوالب (Slots)',
+        titleEn: 'Slot Transclusion (Slots)',
+        xp: 100,
+        type: 'quiz',
+        summaryAr: 'وسم slot داخل المكون يتيح للآباء حقن أي محتوى فرعي بحرية تامة.',
+        summaryEn: 'The slot tag enables flexible child content transclusion.',
+        theoryAr: `عندما تصنع قالباً عاماً مثل نافذة منبثقة أو بطاقة:
+\`\`\`liquid
+--- ui (Modal.liq)
+div.modal-box
+  h2 {title}
+  div.body
+    slot
+\`\`\`
+الآن يستطيع أي مكون استخدامه وحقن أي عناصر تحته:
+\`\`\`liquid
+Modal title="تنبيه"
+  p هذا النص سيتم حقنه داخل مكان الـ slot!
+\`\`\``,
+        theoryEn: `Slots allow passing markup into components:
+\`\`\`liquid
+div.card
+  slot
+\`\`\``,
+        questionAr: 'أين سيتم عرض الأطفال الممررين تحت مكون معين؟',
+        questionEn: 'Where are the children passed to a component rendered?',
+        options: [
+          'في المكان المخصص لوسم slot داخل المكون الفرعي',
+          'في نهاية الصفحة دائماً',
+          'في عنوان التبويب document.title',
+          'يتم حذفهم تلقائياً'
+        ],
+        correctIndex: 0,
+        explanationAr: 'وسم slot يحدد النقطة الدقيقة التي يتم فيها تضمين واجهة الأب داخل الابن.',
+        explanationEn: 'The slot tag specifies the exact placeholder for transcluded content.'
+      }
+    ],
+    exam: {
+      id: 's3-boss',
+      titleAr: '🏆 امتحان نهاية الموسم الثالث: مهندس النظم والمكونات',
+      titleEn: '🏆 Season 3 Boss Exam: Master Component Architect',
+      rewardXp: 400,
+      questions: [
+        {
+          qAr: 'كيف نكتب حلقة تكرار قائمة المهام `todos` مع مفتاح المعرف `todo.id` في Liquid؟',
+          qEn: 'How do you write a keyed each loop for todos with id in Liquid?',
+          options: [
+            'each todos() as todo (todo.id)',
+            'for todo in todos():',
+            'todos.map(todo => (key=todo.id))',
+            'each todo of todos'
+          ],
+          correct: 0,
+          expAr: 'الصيغة القياسية في Liquid هي: each items() as item (item.id).'
+        },
+        {
+          qAr: 'ما هو كود الخطأ الذي يظهر عند وجود خطأ في كتابة صيغة حلقة each؟',
+          qEn: 'Which error code appears for a malformed each block?',
+          options: ['LQ-104', 'LQ-101', 'LQ-201', 'LQ-402'],
+          correct: 0,
+          expAr: 'الخطأ LQ-104 مخصص لـ "Malformed each block syntax".'
+        },
+        {
+          qAr: 'هل يمكن تمرير قيم الإشارات التفاعلية كـ Props للمكونات الفرعية؟',
+          qEn: 'Can reactive signals be passed as props to child components?',
+          options: [
+            'نعم، إما بتمرير دالة الإشارة نفسها أو قيمتها الحالية ويتم تتبعها بدقة',
+            'لا، المكونات تقبل النصوص فقط',
+            'فقط إذا كانت القيمة رقماً زوجياً',
+            'يجب تحويلها إلى سلسلة JSON دائماً'
+          ],
+          correct: 0,
+          expAr: 'نعم، تمرير الإشارات أو القيم المحسوبة مدعوم بشكل أصيل ومرن.'
+        },
+        {
+          qAr: 'ماذا يحدث إذا تكرر المفتاح نفسه لعدة عناصر داخل حلقة each؟',
+          qEn: 'What happens if duplicate keys are used in an each loop?',
+          options: [
+            'يطلق Liquid التحذير LQ-204 لتنبيه المبرمج مع الحفاظ على استقرار التطبيق',
+            'ينهار المتصفح بالكامل',
+            'يتم حذف قاعدة البيانات',
+            'يتوقف خادم الإنترنت'
+          ],
+          correct: 0,
+          expAr: 'يقوم Liquid بمعالجة الخطأ بذكاء وإطلاق تنبيه تشخيصي LQ-204 مع معرف بديل.'
+        },
+        {
+          qAr: 'في شروط if / elseif / else، كيف يتم تمييز نهاية كل فرع؟',
+          qEn: 'In if / elseif / else blocks, how is the end of each branch recognized?',
+          options: [
+            'عبر العودة إلى مستوى المسافات البادئة السابق (Indentation dedent)',
+            'بكتابة endif;',
+            'بوضع قوس مغلق }',
+            'بكتابة الكلمة المحجوزة stop'
+          ],
+          correct: 0,
+          expAr: 'تعتمد لغة Liquid كلياً على الإزاحة البادئة دون الحاجة لأي وسوم إغلاق أو أقواس.'
+        }
+      ]
+    }
+  },
+  {
+    id: 4,
+    titleAr: 'الموسم الرابع: الإتقان الشامل — التوجيه والحالة والإنتاج',
+    titleEn: 'Season 4: Complete Mastery — Routing, Store & Production',
+    badge: '👑',
+    badgeNameAr: 'شارة غراند ماستر ليكويد',
+    badgeNameEn: 'Liquid Grandmaster Badge',
+    descriptionAr: 'أنشئ تطبيقات كاملة متعددة الصفحات مع createRouter و createStore و Scoped CSS والإنتاج فائق الخفة.',
+    descriptionEn: 'Build full single-page apps with router, global store, scoped CSS, and sub-5KB production bundles.',
+    totalXp: 1000,
+    examThreshold: 80,
+    episodes: [
+      {
+        id: 's4-e1',
+        titleAr: 'الموجّه الذكي عالي السرعة (Liquid Router)',
+        titleEn: 'The Lightweight Router (createRouter)',
+        xp: 125,
+        type: 'code',
+        summaryAr: 'دعم كامل للـ SPA عبر createRouter({ routes, mode: "hash" }) و RouterView.',
+        summaryEn: 'Built-in SPA routing with hash and history modes and dynamic params.',
+        theoryAr: `إنشاء تطبيق متعدد الصفحات في Liquid:
+\`\`\`javascript
+const { RouterView, navigate } = createRouter({
+  routes: [
+    { path: '/', component: Home },
+    { path: '/about', component: About }
+  ],
+  mode: 'hash'
+});
+\`\`\`
+ثم تضع \`RouterView\` في صفحتك الرئيسية لتتولى عرض المكون المطابق للمسار تلقائياً!`,
+        theoryEn: `Setting up routes in Liquid:
+\`\`\`javascript
+const { RouterView, navigate } = createRouter({ routes, mode: 'hash' });
+\`\`\``,
+        starterCode: `--- logic
+const routes = [
+  { path: '/', component: null },
+  { path: '/dashboard', component: null },
+  { path: '*', component: null }
+];
+const router = createRouter({ routes });
+--- ui
+div.app
+  p نظام التوجيه جاهز
+`,
+        challengePromptAr: 'تأكد من وجود مسار بديل للـ 404 عبر path: "*" ثم اضغط فحص الكود.',
+        challengePromptEn: 'Ensure a wildcard route path: "*" is present, then check.',
+        validate(code) {
+          try {
+            compile(code);
+            if (!code.includes("'*'") && !code.includes('"*"')) {
+              return { success: false, msgAr: 'يجب أن تحتوي قائمة المسارات على المسار البديل "*"', msgEn: 'Must include wildcard route "*"' };
+            }
+            return { success: true };
+          } catch (e) {
+            return { success: false, msgAr: `خطأ ترجمة: ${e.message}`, msgEn: `Error: ${e.message}` };
+          }
+        }
+      },
+      {
+        id: 's4-e2',
+        titleAr: 'المخزن العام المشترك (createStore)',
+        titleEn: 'Shared State Store (createStore)',
+        xp: 125,
+        type: 'quiz',
+        summaryAr: 'إدارة الحالة المركزية لمشاركتها عبر كافة الصفحات والمكونات بسلاسة.',
+        summaryEn: 'Centralized state management accessible anywhere in your component tree.',
+        theoryAr: `عندما تحتاج لمشاركة بيانات المستخدم أو السلة عبر صفحات التطبيق:
+\`\`\`javascript
+const userStore = createStore({
+  name: 'عمر',
+  cart: []
+}, {
+  addToCart(store, item) {
+    store.cart.value = [...store.cart.value, item];
+  }
+});
+\`\`\`
+أي مكون يستورد \`userStore\` يرى نفس الإشارات المتفاعلة بدون تكرار!`,
+        theoryEn: `Global reactive store:
+\`\`\`javascript
+const store = createStore(initialState, actions);
+\`\`\``,
+        questionAr: 'ما هي الفائدة الرئيسية لاستخدام createStore بدلاً من تمرير الـ Props يدوياً؟',
+        questionEn: 'What is the primary advantage of createStore over prop drilling?',
+        options: [
+          'تجنب تمرير البيانات عبر طبقات متعددة من المكونات (Prop Drilling) وإتاحة وصول مباشر للحالة',
+          'تحويل لغة التطبيق إلى لغة ثنائية',
+          'تقليل سرعة الإنترنت',
+          'حذف ملفات الـ CSS'
+        ],
+        correctIndex: 0,
+        explanationAr: 'createStore يوفر وصولاً مباشراً للحالة المشتركة من أي مكون دون الحاجة لتمريرها يدوياً عبر كل أب.',
+        explanationEn: 'createStore provides direct reactive state access avoiding prop drilling.'
+      },
+      {
+        id: 's4-e3',
+        titleAr: 'الأنماط المعزولة ودعم RTL العربي',
+        titleEn: 'Scoped CSS & RTL Direction',
+        xp: 125,
+        type: 'code',
+        summaryAr: 'قسم --- style يُعزل تلقائياً بنظام scoped hash ويمنع تسرب التنسيقات بين المكونات.',
+        summaryEn: 'The --- style section is automatically scoped with zero style bleeding.',
+        theoryAr: `في أي ملف \`.liq\`، قسم الأنماط محمي ومعزول بالكامل:
+\`\`\`liquid
+--- style
+.title {
+  color: #0284c7;
+  font-weight: 800;
+}
+--- ui
+h1.title أنا منسق بأمان بدون التأثير على أي عنصر آخر في الموقع
+\`\`\`
+مترجم Liquid يضيف تلقائياً محدد الـ scope الفريد لكل قاعدة CSS دون أن تشغل بالك!`,
+        theoryEn: `Zero-leak scoped CSS:
+\`\`\`liquid
+--- style
+.title { color: #0284c7; }
+\`\`\``,
+        starterCode: `--- style
+.cyber-card {
+  background: #0f172a;
+  color: #38bdf8;
+  padding: 1rem;
+  border-radius: 12px;
+  border: 1px solid #0284c7;
+}
+--- ui
+div.cyber-card
+  h2 بطاقة معزولة التنسيق
+`,
+        challengePromptAr: 'افحص كود التنسيق المعزول ثم اضغط فحص.',
+        challengePromptEn: 'Verify scoped styles syntax and check.',
+        validate(code) {
+          try {
+            const res = compile(code);
+            if (!res.css || !res.css.includes('cyber-card')) {
+              return { success: false, msgAr: 'يجب أن يُنتج المترجم قواعد CSS لكلاس cyber-card', msgEn: 'Must produce CSS for cyber-card' };
+            }
+            return { success: true };
+          } catch (e) {
+            return { success: false, msgAr: `خطأ ترجمة: ${e.message}`, msgEn: `Error: ${e.message}` };
+          }
+        }
+      },
+      {
+        id: 's4-e4',
+        titleAr: 'الإنتاج عالي السرعة وأدوات الـ CLI',
+        titleEn: 'Ultra-Fast Production & CLI',
+        xp: 125,
+        type: 'quiz',
+        summaryAr: 'liquid build ينتج حزمة نقية وخفيفة بحجم أقل من 5 كيلوبايت، جاهزة لأي سيرفر VPS.',
+        summaryEn: 'liquid build produces tiny <5KB bundles ready for zero-config VPS deployment.',
+        theoryAr: `أوامر Liquid الأساسية للمطور:
+- \`liquid create my-app\`: إنشاء مشروع جاهز بأفضل الممارسات.
+- \`liquid dev\`: تشغيل خادم التطوير مع التحديث الفوري (HMR).
+- \`liquid guide\`: فتح الدليل التفاعلي وموسوعة الأخطاء على المنفذ 4000.
+- \`liquid guide --play\`: فتح أكاديمية التعلّم التفاعلية.
+- \`liquid build\`: تجميع المشروع للإنتاج بسرعة فائقة (<150ms).
+- \`lqe\` (أو \`liquid edit\`): محرر التيرمينال التفاعلي المخصص للهواتف وسيرفرات الـ VPS!`,
+        theoryEn: `Core CLI commands: create, dev, guide, guide --play, build, and lqe.`,
+        questionAr: 'ما هو الأمر الذي يقوم بتشغيل أكاديمية التعلّم التفاعلية ومواسم الـ XP مباشرة على المنفذ 4000؟',
+        questionEn: 'Which command launches the gamified microlearning arena on port 4000?',
+        options: [
+          'liquid guide --play',
+          'liquid run-game',
+          'npm start --game-mode',
+          'liquid play-music'
+        ],
+        correctIndex: 0,
+        explanationAr: 'الأمر المعتمد هو liquid guide --play (أو اختصاره liquid play).',
+        explanationEn: 'The verified command is liquid guide --play.'
+      }
+    ],
+    exam: {
+      id: 's4-boss',
+      titleAr: '👑 الامتحان الكبير: تتويج غراند ماستر ليكويد (Grandmaster)',
+      titleEn: '👑 Grandmaster Exam: The Ultimate Liquid Trial',
+      rewardXp: 500,
+      questions: [
+        {
+          qAr: 'ما هو حجم نواة بيئة التشغيل لـ Liquid في الإنتاج؟',
+          qEn: 'What is the gzipped core runtime size of Liquid in production?',
+          options: [
+            'أقل من 5 كيلوبايت مضغوطة (< 5 KB gzipped)',
+            'أكثر من 150 كيلوبايت',
+            'نصف غيغابايت',
+            'يتطلب تثبيت برامج خارجية على جهاز العميل'
+          ],
+          correct: 0,
+          expAr: 'نواة Liquid بالكامل (Signals + DOM Helpers + Keyed Reconciliation) بحجم قياسي أقل من 5KB!'
+        },
+        {
+          qAr: 'كيف يعزل مترجم Liquid قواعد CSS في كل مكون لمنع تداخل الأنماط؟',
+          qEn: 'How does the Liquid compiler scope CSS rules to prevent bleeding?',
+          options: [
+            'بتوليد هاش فريد مثل [lq-xxxxx] وإضافته تلقائياً لكافة المحددات وعناصر الـ DOM المقابلة',
+            'بتحويل كل التنسيقات إلى ملف وورد',
+            'بمنع استخدام الألوان في الموقع',
+            'بإلغاء خاصية التنسيق نهائياً'
+          ],
+          correct: 0,
+          expAr: 'يتم احتساب هاش فريد لكل مكون وحقنه في محددات الـ CSS والوسوم الناتجة.'
+        },
+        {
+          qAr: 'ما هو كود الخطأ الذي يظهر عندما يكون المنفذ المطلوب محجوزاً بالفعل من تطبيق آخر (EADDRINUSE)؟',
+          qEn: 'Which error code indicates the requested port is already in use (EADDRINUSE)?',
+          options: ['LQ-401', 'LQ-102', 'LQ-204', 'LQ-301'],
+          correct: 0,
+          expAr: 'الخطأ LQ-401 مخصص لـ "Port already in use".'
+        },
+        {
+          qAr: 'هل يتطلب إطار عمل Liquid وجود Node.js أو بيئة خاصة في متصفح الزائر؟',
+          qEn: 'Does Liquid require Node.js on the client browser?',
+          options: [
+            'لا، كود الإنتاج الناتج هو كود JavaScript متوافق نقي (Standard ESM) يعمل في أي متصفح حديث',
+            'نعم، يجب تثبيت Node.js لدى كل زائر للموقع',
+            'يعمل فقط عبر شبكة خاصة',
+            'يحتاج لتنزيل إضافات للمتصفح'
+          ],
+          correct: 0,
+          expAr: 'حزم Liquid المجمعة هي Standard Pure ESM خفيفة متوافقة 100% مع كافة المتصفحات.'
+        },
+        {
+          qAr: 'ما هي الأداة المضمنة في Liquid لتحرير الأكواد مباشرة من التيرمينال وسيرفرات الـ VPS وهواتف أندرويد؟',
+          qEn: 'Which built-in terminal editor is designed for VPS servers and Android Termux?',
+          options: [
+            'lqe (المحرر التفاعلي liquid-edit)',
+            'vim-liquid-plugin',
+            'vscode-cloud-daemon',
+            'notepad-terminal'
+          ],
+          correct: 0,
+          expAr: 'الأداة lqe (liquid-edit) هي محرر تيرمينال مصمم خصيصاً للمطورين على السيرفرات والهواتف.'
+        }
+      ]
+    }
+  }
+];
+function getSeason(id) {
+  return SEASONS.find(s => s.id === Number(id)) || SEASONS[0];
+}
+function getMaxXp() {
+  return SEASONS.reduce((acc, s) => {
+    const epXp = s.episodes.reduce((eAcc, ep) => eAcc + ep.xp, 0);
+    return acc + epXp + (s.exam ? s.exam.rewardXp : 0);
+  }, 0);
+}
 const routes = [
   { path: '/', component: Home },
   { path: '/guide', component: Guide },
+  { path: '/play', component: Play },
   { path: '/playground', component: Playground },
   { path: '/cheatsheet', component: Cheatsheet },
   { path: '/errors', component: Errors },
@@ -1398,7 +2426,7 @@ function Header(props = {}, context = {}) {
   _el5.appendChild(_t6);
   _el2.appendChild(_el5);
   const _el7 = element("span", "data-l-1aob09u", ["brand-badge"]);
-  const _t8 = text("v1.0.0");
+  const _t8 = text("v0.2.0");
   _el7.appendChild(_t8);
   _el2.appendChild(_el7);
   _el1.appendChild(_el2);
@@ -1418,157 +2446,171 @@ function Header(props = {}, context = {}) {
   _el12.appendChild(_t13);
   _el9.appendChild(_el12);
   const _el14 = element("button", "data-l-1aob09u", ["nav-link"]);
-  bindAttr(_el14, "class", () => ("nav-link" + ((currentPath() === '/playground' ? 'active' : '') ? ' ' + (currentPath() === '/playground' ? 'active' : '') : '')));
-  listen(_el14, "click", (e) => { goTo('/playground'); }, []);
+  bindAttr(_el14, "class", () => ("nav-link" + ((currentPath() === '/play' ? 'active' : '') ? ' ' + (currentPath() === '/play' ? 'active' : '') : '')));
+  listen(_el14, "click", (e) => { goTo('/play'); }, []);
   const _t15 = text('');
-  bindText(_t15, () => (t('navPlayground')));
+  bindText(_t15, () => (t('navPlay')));
   _el14.appendChild(_t15);
   _el9.appendChild(_el14);
   const _el16 = element("button", "data-l-1aob09u", ["nav-link"]);
-  bindAttr(_el16, "class", () => ("nav-link" + ((currentPath() === '/cheatsheet' ? 'active' : '') ? ' ' + (currentPath() === '/cheatsheet' ? 'active' : '') : '')));
-  listen(_el16, "click", (e) => { goTo('/cheatsheet'); }, []);
+  bindAttr(_el16, "class", () => ("nav-link" + ((currentPath() === '/playground' ? 'active' : '') ? ' ' + (currentPath() === '/playground' ? 'active' : '') : '')));
+  listen(_el16, "click", (e) => { goTo('/playground'); }, []);
   const _t17 = text('');
-  bindText(_t17, () => (t('navCheatsheet')));
+  bindText(_t17, () => (t('navPlayground')));
   _el16.appendChild(_t17);
   _el9.appendChild(_el16);
   const _el18 = element("button", "data-l-1aob09u", ["nav-link"]);
-  bindAttr(_el18, "class", () => ("nav-link" + ((currentPath() === '/errors' ? 'active' : '') ? ' ' + (currentPath() === '/errors' ? 'active' : '') : '')));
-  listen(_el18, "click", (e) => { goTo('/errors'); }, []);
+  bindAttr(_el18, "class", () => ("nav-link" + ((currentPath() === '/cheatsheet' ? 'active' : '') ? ' ' + (currentPath() === '/cheatsheet' ? 'active' : '') : '')));
+  listen(_el18, "click", (e) => { goTo('/cheatsheet'); }, []);
   const _t19 = text('');
-  bindText(_t19, () => (t('navErrors')));
+  bindText(_t19, () => (t('navCheatsheet')));
   _el18.appendChild(_t19);
   _el9.appendChild(_el18);
   const _el20 = element("button", "data-l-1aob09u", ["nav-link"]);
-  bindAttr(_el20, "class", () => ("nav-link" + ((currentPath() === '/deploy' ? 'active' : '') ? ' ' + (currentPath() === '/deploy' ? 'active' : '') : '')));
-  listen(_el20, "click", (e) => { goTo('/deploy'); }, []);
+  bindAttr(_el20, "class", () => ("nav-link" + ((currentPath() === '/errors' ? 'active' : '') ? ' ' + (currentPath() === '/errors' ? 'active' : '') : '')));
+  listen(_el20, "click", (e) => { goTo('/errors'); }, []);
   const _t21 = text('');
-  bindText(_t21, () => (t('navDeploy')));
+  bindText(_t21, () => (t('navErrors')));
   _el20.appendChild(_t21);
   _el9.appendChild(_el20);
+  const _el22 = element("button", "data-l-1aob09u", ["nav-link"]);
+  bindAttr(_el22, "class", () => ("nav-link" + ((currentPath() === '/deploy' ? 'active' : '') ? ' ' + (currentPath() === '/deploy' ? 'active' : '') : '')));
+  listen(_el22, "click", (e) => { goTo('/deploy'); }, []);
+  const _t23 = text('');
+  bindText(_t23, () => (t('navDeploy')));
+  _el22.appendChild(_t23);
+  _el9.appendChild(_el22);
   _el1.appendChild(_el9);
-  const _el22 = element("div", "data-l-1aob09u", ["actions"]);
-  const _el23 = element("button", "data-l-1aob09u", ["action-btn"]);
-  _el23.setAttribute("type", "button");
-  _el23.setAttribute("title", "تبديل اللغة / Toggle Language");
-  listen(_el23, "click", toggleLang, []);
-  const _el24 = element("span", "data-l-1aob09u", null);
-  const _t25 = text("🌐");
-  _el24.appendChild(_t25);
-  _el23.appendChild(_el24);
+  const _el24 = element("div", "data-l-1aob09u", ["actions"]);
+  const _el25 = element("button", "data-l-1aob09u", ["action-btn"]);
+  _el25.setAttribute("type", "button");
+  _el25.setAttribute("title", "تبديل اللغة / Toggle Language");
+  listen(_el25, "click", toggleLang, []);
   const _el26 = element("span", "data-l-1aob09u", null);
-  const _t27 = text('');
-  bindText(_t27, () => (t('toggleLang')));
+  const _t27 = text("🌐");
   _el26.appendChild(_t27);
-  _el23.appendChild(_el26);
-  _el22.appendChild(_el23);
-  const _el28 = element("button", "data-l-1aob09u", ["action-btn"]);
-  _el28.setAttribute("type", "button");
-  _el28.setAttribute("title", "المظهر / Theme");
-  listen(_el28, "click", toggleTheme, []);
-  const _el29 = element("span", "data-l-1aob09u", null);
-  const _t30 = text('');
-  bindText(_t30, () => (theme.value === 'dark' ? '☀️' : '🌙'));
-  _el29.appendChild(_t30);
-  _el28.appendChild(_el29);
-  _el22.appendChild(_el28);
-  const _el31 = element("button", "data-l-1aob09u", ["mobile-toggle"]);
-  _el31.setAttribute("type", "button");
-  _el31.setAttribute("aria-label", "Menu");
-  listen(_el31, "click", toggleMobile, []);
-  const _el32 = element("span", "data-l-1aob09u", null);
-  const _t33 = text('');
-  bindText(_t33, () => (mobileMenuOpen.value ? '✕' : '☰'));
-  _el32.appendChild(_t33);
-  _el31.appendChild(_el32);
-  _el22.appendChild(_el31);
-  _el1.appendChild(_el22);
+  _el25.appendChild(_el26);
+  const _el28 = element("span", "data-l-1aob09u", null);
+  const _t29 = text('');
+  bindText(_t29, () => (t('toggleLang')));
+  _el28.appendChild(_t29);
+  _el25.appendChild(_el28);
+  _el24.appendChild(_el25);
+  const _el30 = element("button", "data-l-1aob09u", ["action-btn"]);
+  _el30.setAttribute("type", "button");
+  _el30.setAttribute("title", "المظهر / Theme");
+  listen(_el30, "click", toggleTheme, []);
+  const _el31 = element("span", "data-l-1aob09u", null);
+  const _t32 = text('');
+  bindText(_t32, () => (theme.value === 'dark' ? '☀️' : '🌙'));
+  _el31.appendChild(_t32);
+  _el30.appendChild(_el31);
+  _el24.appendChild(_el30);
+  const _el33 = element("button", "data-l-1aob09u", ["mobile-toggle"]);
+  _el33.setAttribute("type", "button");
+  _el33.setAttribute("aria-label", "Menu");
+  listen(_el33, "click", toggleMobile, []);
+  const _el34 = element("span", "data-l-1aob09u", null);
+  const _t35 = text('');
+  bindText(_t35, () => (mobileMenuOpen.value ? '✕' : '☰'));
+  _el34.appendChild(_t35);
+  _el33.appendChild(_el34);
+  _el24.appendChild(_el33);
+  _el1.appendChild(_el24);
   _el0.appendChild(_el1);
-  const _anchor34 = document.createComment('if');
-  _el0.appendChild(_anchor34);
-  createIfBlock(_anchor34, () => (mobileMenuOpen.value), () => {
-    const _thenNodes35 = [];
-    const _el36 = element("div", "data-l-1aob09u", ["mobile-drawer"]);
-    const _el37 = element("button", "data-l-1aob09u", ["mobile-link"]);
-    bindAttr(_el37, "class", () => ("mobile-link" + ((currentPath() === '/' ? 'active' : '') ? ' ' + (currentPath() === '/' ? 'active' : '') : '')));
-    listen(_el37, "click", (e) => { goTo('/'); }, []);
-    const _t38 = text('');
-    bindText(_t38, () => (t('navHome')));
-    _el37.appendChild(_t38);
-    _el36.appendChild(_el37);
+  const _anchor36 = document.createComment('if');
+  _el0.appendChild(_anchor36);
+  createIfBlock(_anchor36, () => (mobileMenuOpen.value), () => {
+    const _thenNodes37 = [];
+    const _el38 = element("div", "data-l-1aob09u", ["mobile-drawer"]);
     const _el39 = element("button", "data-l-1aob09u", ["mobile-link"]);
-    bindAttr(_el39, "class", () => ("mobile-link" + ((currentPath() === '/guide' ? 'active' : '') ? ' ' + (currentPath() === '/guide' ? 'active' : '') : '')));
-    listen(_el39, "click", (e) => { goTo('/guide'); }, []);
+    bindAttr(_el39, "class", () => ("mobile-link" + ((currentPath() === '/' ? 'active' : '') ? ' ' + (currentPath() === '/' ? 'active' : '') : '')));
+    listen(_el39, "click", (e) => { goTo('/'); }, []);
     const _t40 = text('');
-    bindText(_t40, () => (t('navGuide')));
+    bindText(_t40, () => (t('navHome')));
     _el39.appendChild(_t40);
-    _el36.appendChild(_el39);
+    _el38.appendChild(_el39);
     const _el41 = element("button", "data-l-1aob09u", ["mobile-link"]);
-    bindAttr(_el41, "class", () => ("mobile-link" + ((currentPath() === '/playground' ? 'active' : '') ? ' ' + (currentPath() === '/playground' ? 'active' : '') : '')));
-    listen(_el41, "click", (e) => { goTo('/playground'); }, []);
+    bindAttr(_el41, "class", () => ("mobile-link" + ((currentPath() === '/guide' ? 'active' : '') ? ' ' + (currentPath() === '/guide' ? 'active' : '') : '')));
+    listen(_el41, "click", (e) => { goTo('/guide'); }, []);
     const _t42 = text('');
-    bindText(_t42, () => (t('navPlayground')));
+    bindText(_t42, () => (t('navGuide')));
     _el41.appendChild(_t42);
-    _el36.appendChild(_el41);
+    _el38.appendChild(_el41);
     const _el43 = element("button", "data-l-1aob09u", ["mobile-link"]);
-    bindAttr(_el43, "class", () => ("mobile-link" + ((currentPath() === '/cheatsheet' ? 'active' : '') ? ' ' + (currentPath() === '/cheatsheet' ? 'active' : '') : '')));
-    listen(_el43, "click", (e) => { goTo('/cheatsheet'); }, []);
+    bindAttr(_el43, "class", () => ("mobile-link" + ((currentPath() === '/play' ? 'active' : '') ? ' ' + (currentPath() === '/play' ? 'active' : '') : '')));
+    listen(_el43, "click", (e) => { goTo('/play'); }, []);
     const _t44 = text('');
-    bindText(_t44, () => (t('navCheatsheet')));
+    bindText(_t44, () => (t('navPlay')));
     _el43.appendChild(_t44);
-    _el36.appendChild(_el43);
+    _el38.appendChild(_el43);
     const _el45 = element("button", "data-l-1aob09u", ["mobile-link"]);
-    bindAttr(_el45, "class", () => ("mobile-link" + ((currentPath() === '/errors' ? 'active' : '') ? ' ' + (currentPath() === '/errors' ? 'active' : '') : '')));
-    listen(_el45, "click", (e) => { goTo('/errors'); }, []);
+    bindAttr(_el45, "class", () => ("mobile-link" + ((currentPath() === '/playground' ? 'active' : '') ? ' ' + (currentPath() === '/playground' ? 'active' : '') : '')));
+    listen(_el45, "click", (e) => { goTo('/playground'); }, []);
     const _t46 = text('');
-    bindText(_t46, () => (t('navErrors')));
+    bindText(_t46, () => (t('navPlayground')));
     _el45.appendChild(_t46);
-    _el36.appendChild(_el45);
+    _el38.appendChild(_el45);
     const _el47 = element("button", "data-l-1aob09u", ["mobile-link"]);
-    bindAttr(_el47, "class", () => ("mobile-link" + ((currentPath() === '/deploy' ? 'active' : '') ? ' ' + (currentPath() === '/deploy' ? 'active' : '') : '')));
-    listen(_el47, "click", (e) => { goTo('/deploy'); }, []);
+    bindAttr(_el47, "class", () => ("mobile-link" + ((currentPath() === '/cheatsheet' ? 'active' : '') ? ' ' + (currentPath() === '/cheatsheet' ? 'active' : '') : '')));
+    listen(_el47, "click", (e) => { goTo('/cheatsheet'); }, []);
     const _t48 = text('');
-    bindText(_t48, () => (t('navDeploy')));
+    bindText(_t48, () => (t('navCheatsheet')));
     _el47.appendChild(_t48);
-    _el36.appendChild(_el47);
-    const _el49 = element("div", "data-l-1aob09u", ["mobile-actions"]);
-    const _el50 = element("button", "data-l-1aob09u", ["action-btn"]);
-    _el50.setAttribute("style", "flex: 1;");
-    _el50.setAttribute("type", "button");
-    listen(_el50, "click", toggleLang, []);
-    const _el51 = element("span", "data-l-1aob09u", null);
-    const _t52 = text("🌐");
+    _el38.appendChild(_el47);
+    const _el49 = element("button", "data-l-1aob09u", ["mobile-link"]);
+    bindAttr(_el49, "class", () => ("mobile-link" + ((currentPath() === '/errors' ? 'active' : '') ? ' ' + (currentPath() === '/errors' ? 'active' : '') : '')));
+    listen(_el49, "click", (e) => { goTo('/errors'); }, []);
+    const _t50 = text('');
+    bindText(_t50, () => (t('navErrors')));
+    _el49.appendChild(_t50);
+    _el38.appendChild(_el49);
+    const _el51 = element("button", "data-l-1aob09u", ["mobile-link"]);
+    bindAttr(_el51, "class", () => ("mobile-link" + ((currentPath() === '/deploy' ? 'active' : '') ? ' ' + (currentPath() === '/deploy' ? 'active' : '') : '')));
+    listen(_el51, "click", (e) => { goTo('/deploy'); }, []);
+    const _t52 = text('');
+    bindText(_t52, () => (t('navDeploy')));
     _el51.appendChild(_t52);
-    _el50.appendChild(_el51);
-    const _el53 = element("span", "data-l-1aob09u", null);
-    const _t54 = text('');
-    bindText(_t54, () => (t('toggleLang')));
-    _el53.appendChild(_t54);
-    _el50.appendChild(_el53);
-    _el49.appendChild(_el50);
-    const _el55 = element("button", "data-l-1aob09u", ["action-btn"]);
-    _el55.setAttribute("style", "flex: 1;");
-    _el55.setAttribute("type", "button");
-    listen(_el55, "click", toggleTheme, []);
-    const _el56 = element("span", "data-l-1aob09u", null);
-    const _t57 = text('');
-    bindText(_t57, () => (theme.value === 'dark' ? '☀️ فاتح' : '🌙 داكن'));
-    _el56.appendChild(_t57);
-    _el55.appendChild(_el56);
-    _el49.appendChild(_el55);
-    _el36.appendChild(_el49);
-    _thenNodes35.push(_el36);
-    return _thenNodes35;
-  }, null);
-  const _anchor58 = document.createComment('if');
-  _el0.appendChild(_anchor58);
-  createIfBlock(_anchor58, () => (toastMessage.value), () => {
-    const _thenNodes59 = [];
-    const _el60 = element("div", "data-l-1aob09u", ["toast"]);
+    _el38.appendChild(_el51);
+    const _el53 = element("div", "data-l-1aob09u", ["mobile-actions"]);
+    const _el54 = element("button", "data-l-1aob09u", ["action-btn"]);
+    _el54.setAttribute("style", "flex: 1;");
+    _el54.setAttribute("type", "button");
+    listen(_el54, "click", toggleLang, []);
+    const _el55 = element("span", "data-l-1aob09u", null);
+    const _t56 = text("🌐");
+    _el55.appendChild(_t56);
+    _el54.appendChild(_el55);
+    const _el57 = element("span", "data-l-1aob09u", null);
+    const _t58 = text('');
+    bindText(_t58, () => (t('toggleLang')));
+    _el57.appendChild(_t58);
+    _el54.appendChild(_el57);
+    _el53.appendChild(_el54);
+    const _el59 = element("button", "data-l-1aob09u", ["action-btn"]);
+    _el59.setAttribute("style", "flex: 1;");
+    _el59.setAttribute("type", "button");
+    listen(_el59, "click", toggleTheme, []);
+    const _el60 = element("span", "data-l-1aob09u", null);
     const _t61 = text('');
-    bindText(_t61, () => (toastMessage.value));
+    bindText(_t61, () => (theme.value === 'dark' ? '☀️ فاتح' : '🌙 داكن'));
     _el60.appendChild(_t61);
-    _thenNodes59.push(_el60);
-    return _thenNodes59;
+    _el59.appendChild(_el60);
+    _el53.appendChild(_el59);
+    _el38.appendChild(_el53);
+    _thenNodes37.push(_el38);
+    return _thenNodes37;
+  }, null);
+  const _anchor62 = document.createComment('if');
+  _el0.appendChild(_anchor62);
+  createIfBlock(_anchor62, () => (toastMessage.value), () => {
+    const _thenNodes63 = [];
+    const _el64 = element("div", "data-l-1aob09u", ["toast"]);
+    const _t65 = text('');
+    bindText(_t65, () => (toastMessage.value));
+    _el64.appendChild(_t65);
+    _thenNodes63.push(_el64);
+    return _thenNodes63;
   }, null);
   _root.push(_el0);
   return _root.length === 1 ? _root[0] : _root;
@@ -4199,286 +5241,297 @@ function Home(props = {}, context = {}) {
     activeDemoTab.value = tab;
   }
   const _root = [];
-  const _el0 = element("div", "data-l-26sow2", ["home-page"]);
-  const _el1 = element("section", "data-l-26sow2", ["hero"]);
-  const _el2 = element("div", "data-l-26sow2", ["hero-badge"]);
-  const _el3 = element("span", "data-l-26sow2", null);
+  const _el0 = element("div", "data-l-1xmbid8", ["home-page"]);
+  const _el1 = element("section", "data-l-1xmbid8", ["hero"]);
+  const _el2 = element("div", "data-l-1xmbid8", ["hero-badge"]);
+  const _el3 = element("span", "data-l-1xmbid8", null);
   const _t4 = text("🫟");
   _el3.appendChild(_t4);
   _el2.appendChild(_el3);
-  const _el5 = element("span", "data-l-26sow2", null);
+  const _el5 = element("span", "data-l-1xmbid8", null);
   const _t6 = text('');
   bindText(_t6, () => (t('heroBadge')));
   _el5.appendChild(_t6);
   _el2.appendChild(_el5);
   _el1.appendChild(_el2);
-  const _el7 = element("h1", "data-l-26sow2", ["hero-title"]);
+  const _el7 = element("h1", "data-l-1xmbid8", ["hero-title"]);
   const _t8 = text('');
   bindText(_t8, () => (t('heroTitle')));
   _el7.appendChild(_t8);
   _el1.appendChild(_el7);
-  const _el9 = element("p", "data-l-26sow2", ["hero-desc"]);
+  const _el9 = element("p", "data-l-1xmbid8", ["hero-desc"]);
   const _t10 = text('');
   bindText(_t10, () => (t('heroDesc')));
   _el9.appendChild(_t10);
   _el1.appendChild(_el9);
-  const _el11 = element("div", "data-l-26sow2", ["hero-cta"]);
-  const _el12 = element("button", "data-l-26sow2", ["cta-btn","primary"]);
+  const _el11 = element("div", "data-l-1xmbid8", ["hero-cta"]);
+  const _el12 = element("button", "data-l-1xmbid8", ["cta-btn","primary"]);
   _el12.setAttribute("type", "button");
   listen(_el12, "click", (e) => { navigate('/guide'); }, []);
-  const _el13 = element("span", "data-l-26sow2", null);
+  const _el13 = element("span", "data-l-1xmbid8", null);
   const _t14 = text('');
   bindText(_t14, () => (t('btnStartLearning')));
   _el13.appendChild(_t14);
   _el12.appendChild(_el13);
   _el11.appendChild(_el12);
-  const _el15 = element("button", "data-l-26sow2", ["cta-btn","secondary"]);
+  const _el15 = element("button", "data-l-1xmbid8", ["cta-btn","play"]);
   _el15.setAttribute("type", "button");
-  listen(_el15, "click", (e) => { navigate('/playground'); }, []);
-  const _el16 = element("span", "data-l-26sow2", null);
-  const _t17 = text('');
-  bindText(_t17, () => (t('btnTryPlayground')));
+  listen(_el15, "click", (e) => { navigate('/play'); }, []);
+  const _el16 = element("span", "data-l-1xmbid8", null);
+  const _t17 = text("🎮 ");
   _el16.appendChild(_t17);
+  const _t18 = text('');
+  bindText(_t18, () => (t('navPlay')));
+  _el16.appendChild(_t18);
   _el15.appendChild(_el16);
   _el11.appendChild(_el15);
-  _el1.appendChild(_el11);
-  const _el18 = element("div", "data-l-26sow2", ["terminal-card"]);
-  const _el19 = element("div", "data-l-26sow2", ["terminal-header"]);
-  const _el20 = element("div", "data-l-26sow2", ["terminal-dots"]);
-  const _el21 = element("span", "data-l-26sow2", ["dot","red"]);
-  _el20.appendChild(_el21);
-  const _el22 = element("span", "data-l-26sow2", ["dot","yellow"]);
-  _el20.appendChild(_el22);
-  const _el23 = element("span", "data-l-26sow2", ["dot","green"]);
-  _el20.appendChild(_el23);
+  const _el19 = element("button", "data-l-1xmbid8", ["cta-btn","secondary"]);
+  _el19.setAttribute("type", "button");
+  listen(_el19, "click", (e) => { navigate('/playground'); }, []);
+  const _el20 = element("span", "data-l-1xmbid8", null);
+  const _t21 = text('');
+  bindText(_t21, () => (t('btnTryPlayground')));
+  _el20.appendChild(_t21);
   _el19.appendChild(_el20);
-  const _el24 = element("span", "data-l-26sow2", ["terminal-label"]);
-  const _t25 = text("bash — liquid-cli");
-  _el24.appendChild(_t25);
-  _el19.appendChild(_el24);
-  _el18.appendChild(_el19);
-  const _el26 = element("div", "data-l-26sow2", ["terminal-body"]);
-  const _el27 = element("code", "data-l-26sow2", ["terminal-code"]);
-  const _t28 = text('');
-  bindText(_t28, () => ('> ' + t('quickStartCommand')));
-  _el27.appendChild(_t28);
-  _el26.appendChild(_el27);
-  const _el29 = element("button", "data-l-26sow2", ["terminal-copy"]);
-  _el29.setAttribute("type", "button");
-  listen(_el29, "click", (e) => { copyToClipboard(t('quickStartCommand')); }, []);
-  const _t30 = text('');
-  bindText(_t30, () => (t('copyCode')));
-  _el29.appendChild(_t30);
-  _el26.appendChild(_el29);
-  _el18.appendChild(_el26);
-  _el1.appendChild(_el18);
+  _el11.appendChild(_el19);
+  _el1.appendChild(_el11);
+  const _el22 = element("div", "data-l-1xmbid8", ["terminal-card"]);
+  const _el23 = element("div", "data-l-1xmbid8", ["terminal-header"]);
+  const _el24 = element("div", "data-l-1xmbid8", ["terminal-dots"]);
+  const _el25 = element("span", "data-l-1xmbid8", ["dot","red"]);
+  _el24.appendChild(_el25);
+  const _el26 = element("span", "data-l-1xmbid8", ["dot","yellow"]);
+  _el24.appendChild(_el26);
+  const _el27 = element("span", "data-l-1xmbid8", ["dot","green"]);
+  _el24.appendChild(_el27);
+  _el23.appendChild(_el24);
+  const _el28 = element("span", "data-l-1xmbid8", ["terminal-label"]);
+  const _t29 = text("bash — liquid-cli");
+  _el28.appendChild(_t29);
+  _el23.appendChild(_el28);
+  _el22.appendChild(_el23);
+  const _el30 = element("div", "data-l-1xmbid8", ["terminal-body"]);
+  const _el31 = element("code", "data-l-1xmbid8", ["terminal-code"]);
+  const _t32 = text('');
+  bindText(_t32, () => ('> ' + t('quickStartCommand')));
+  _el31.appendChild(_t32);
+  _el30.appendChild(_el31);
+  const _el33 = element("button", "data-l-1xmbid8", ["terminal-copy"]);
+  _el33.setAttribute("type", "button");
+  listen(_el33, "click", (e) => { copyToClipboard(t('quickStartCommand')); }, []);
+  const _t34 = text('');
+  bindText(_t34, () => (t('copyCode')));
+  _el33.appendChild(_t34);
+  _el30.appendChild(_el33);
+  _el22.appendChild(_el30);
+  _el1.appendChild(_el22);
   _el0.appendChild(_el1);
-  const _el31 = element("section", "data-l-26sow2", ["features-section"]);
-  const _el32 = element("div", "data-l-26sow2", ["features-grid"]);
-  const _el33 = element("div", "data-l-26sow2", ["feature-card"]);
-  const _el34 = element("span", "data-l-26sow2", ["feature-icon"]);
-  const _t35 = text("📁");
-  _el34.appendChild(_t35);
-  _el33.appendChild(_el34);
-  const _el36 = element("h3", "data-l-26sow2", ["feature-title"]);
-  const _t37 = text('');
-  bindText(_t37, () => (t('feat1Title')));
-  _el36.appendChild(_t37);
-  _el33.appendChild(_el36);
-  const _el38 = element("p", "data-l-26sow2", ["feature-desc"]);
-  const _t39 = text('');
-  bindText(_t39, () => (t('feat1Desc')));
+  const _el35 = element("section", "data-l-1xmbid8", ["features-section"]);
+  const _el36 = element("div", "data-l-1xmbid8", ["features-grid"]);
+  const _el37 = element("div", "data-l-1xmbid8", ["feature-card"]);
+  const _el38 = element("span", "data-l-1xmbid8", ["feature-icon"]);
+  const _t39 = text("📁");
   _el38.appendChild(_t39);
-  _el33.appendChild(_el38);
-  _el32.appendChild(_el33);
-  const _el40 = element("div", "data-l-26sow2", ["feature-card"]);
-  const _el41 = element("span", "data-l-26sow2", ["feature-icon"]);
-  const _t42 = text("⚡");
-  _el41.appendChild(_t42);
-  _el40.appendChild(_el41);
-  const _el43 = element("h3", "data-l-26sow2", ["feature-title"]);
-  const _t44 = text('');
-  bindText(_t44, () => (t('feat2Title')));
-  _el43.appendChild(_t44);
-  _el40.appendChild(_el43);
-  const _el45 = element("p", "data-l-26sow2", ["feature-desc"]);
-  const _t46 = text('');
-  bindText(_t46, () => (t('feat2Desc')));
+  _el37.appendChild(_el38);
+  const _el40 = element("h3", "data-l-1xmbid8", ["feature-title"]);
+  const _t41 = text('');
+  bindText(_t41, () => (t('feat1Title')));
+  _el40.appendChild(_t41);
+  _el37.appendChild(_el40);
+  const _el42 = element("p", "data-l-1xmbid8", ["feature-desc"]);
+  const _t43 = text('');
+  bindText(_t43, () => (t('feat1Desc')));
+  _el42.appendChild(_t43);
+  _el37.appendChild(_el42);
+  _el36.appendChild(_el37);
+  const _el44 = element("div", "data-l-1xmbid8", ["feature-card"]);
+  const _el45 = element("span", "data-l-1xmbid8", ["feature-icon"]);
+  const _t46 = text("⚡");
   _el45.appendChild(_t46);
-  _el40.appendChild(_el45);
-  _el32.appendChild(_el40);
-  const _el47 = element("div", "data-l-26sow2", ["feature-card"]);
-  const _el48 = element("span", "data-l-26sow2", ["feature-icon"]);
-  const _t49 = text("🚀");
-  _el48.appendChild(_t49);
-  _el47.appendChild(_el48);
-  const _el50 = element("h3", "data-l-26sow2", ["feature-title"]);
-  const _t51 = text('');
-  bindText(_t51, () => (t('feat3Title')));
-  _el50.appendChild(_t51);
-  _el47.appendChild(_el50);
-  const _el52 = element("p", "data-l-26sow2", ["feature-desc"]);
-  const _t53 = text('');
-  bindText(_t53, () => (t('feat3Desc')));
+  _el44.appendChild(_el45);
+  const _el47 = element("h3", "data-l-1xmbid8", ["feature-title"]);
+  const _t48 = text('');
+  bindText(_t48, () => (t('feat2Title')));
+  _el47.appendChild(_t48);
+  _el44.appendChild(_el47);
+  const _el49 = element("p", "data-l-1xmbid8", ["feature-desc"]);
+  const _t50 = text('');
+  bindText(_t50, () => (t('feat2Desc')));
+  _el49.appendChild(_t50);
+  _el44.appendChild(_el49);
+  _el36.appendChild(_el44);
+  const _el51 = element("div", "data-l-1xmbid8", ["feature-card"]);
+  const _el52 = element("span", "data-l-1xmbid8", ["feature-icon"]);
+  const _t53 = text("🚀");
   _el52.appendChild(_t53);
-  _el47.appendChild(_el52);
-  _el32.appendChild(_el47);
-  _el31.appendChild(_el32);
-  _el0.appendChild(_el31);
-  const _el54 = element("section", "data-l-26sow2", ["steps-section"]);
-  const _el55 = element("div", "data-l-26sow2", ["section-head"]);
-  const _el56 = element("h2", "data-l-26sow2", ["section-title"]);
+  _el51.appendChild(_el52);
+  const _el54 = element("h3", "data-l-1xmbid8", ["feature-title"]);
+  const _t55 = text('');
+  bindText(_t55, () => (t('feat3Title')));
+  _el54.appendChild(_t55);
+  _el51.appendChild(_el54);
+  const _el56 = element("p", "data-l-1xmbid8", ["feature-desc"]);
   const _t57 = text('');
-  bindText(_t57, () => (t('threeStepTitle')));
+  bindText(_t57, () => (t('feat3Desc')));
   _el56.appendChild(_t57);
-  _el55.appendChild(_el56);
-  const _el58 = element("p", "data-l-26sow2", ["section-sub"]);
-  const _t59 = text("في أقل من 3 دقائق ستكون جاهزاً لتطوير ونشر موقعك!");
-  _el58.appendChild(_t59);
-  _el55.appendChild(_el58);
-  _el54.appendChild(_el55);
-  const _el60 = element("div", "data-l-26sow2", ["steps-list"]);
-  const _el61 = element("div", "data-l-26sow2", ["step-card"]);
-  const _el62 = element("div", "data-l-26sow2", ["step-badge"]);
-  const _t63 = text('');
-  bindText(_t63, () => (t('step1Num')));
+  _el51.appendChild(_el56);
+  _el36.appendChild(_el51);
+  _el35.appendChild(_el36);
+  _el0.appendChild(_el35);
+  const _el58 = element("section", "data-l-1xmbid8", ["steps-section"]);
+  const _el59 = element("div", "data-l-1xmbid8", ["section-head"]);
+  const _el60 = element("h2", "data-l-1xmbid8", ["section-title"]);
+  const _t61 = text('');
+  bindText(_t61, () => (t('threeStepTitle')));
+  _el60.appendChild(_t61);
+  _el59.appendChild(_el60);
+  const _el62 = element("p", "data-l-1xmbid8", ["section-sub"]);
+  const _t63 = text("في أقل من 3 دقائق ستكون جاهزاً لتطوير ونشر موقعك!");
   _el62.appendChild(_t63);
-  _el61.appendChild(_el62);
-  const _el64 = element("div", "data-l-26sow2", ["step-content"]);
-  const _el65 = element("h3", "data-l-26sow2", ["step-title"]);
-  const _t66 = text('');
-  bindText(_t66, () => (t('step1Title')));
-  _el65.appendChild(_t66);
+  _el59.appendChild(_el62);
+  _el58.appendChild(_el59);
+  const _el64 = element("div", "data-l-1xmbid8", ["steps-list"]);
+  const _el65 = element("div", "data-l-1xmbid8", ["step-card"]);
+  const _el66 = element("div", "data-l-1xmbid8", ["step-badge"]);
+  const _t67 = text('');
+  bindText(_t67, () => (t('step1Num')));
+  _el66.appendChild(_t67);
+  _el65.appendChild(_el66);
+  const _el68 = element("div", "data-l-1xmbid8", ["step-content"]);
+  const _el69 = element("h3", "data-l-1xmbid8", ["step-title"]);
+  const _t70 = text('');
+  bindText(_t70, () => (t('step1Title')));
+  _el69.appendChild(_t70);
+  _el68.appendChild(_el69);
+  const _el71 = element("p", "data-l-1xmbid8", ["step-desc"]);
+  const _t72 = text('');
+  bindText(_t72, () => (t('step1Desc')));
+  _el71.appendChild(_t72);
+  _el68.appendChild(_el71);
+  const _el73 = element("div", "data-l-1xmbid8", ["step-code"]);
+  const _el74 = element("span", "data-l-1xmbid8", null);
+  const _t75 = text("npx liquid create my-site");
+  _el74.appendChild(_t75);
+  _el73.appendChild(_el74);
+  const _el76 = element("button", "data-l-1xmbid8", ["terminal-copy"]);
+  _el76.setAttribute("type", "button");
+  listen(_el76, "click", (e) => { copyToClipboard('npx liquid create my-site'); }, []);
+  const _t77 = text('');
+  bindText(_t77, () => (t('copyCode')));
+  _el76.appendChild(_t77);
+  _el73.appendChild(_el76);
+  _el68.appendChild(_el73);
+  _el65.appendChild(_el68);
   _el64.appendChild(_el65);
-  const _el67 = element("p", "data-l-26sow2", ["step-desc"]);
-  const _t68 = text('');
-  bindText(_t68, () => (t('step1Desc')));
-  _el67.appendChild(_t68);
-  _el64.appendChild(_el67);
-  const _el69 = element("div", "data-l-26sow2", ["step-code"]);
-  const _el70 = element("span", "data-l-26sow2", null);
-  const _t71 = text("npx liquid create my-site");
-  _el70.appendChild(_t71);
-  _el69.appendChild(_el70);
-  const _el72 = element("button", "data-l-26sow2", ["terminal-copy"]);
-  _el72.setAttribute("type", "button");
-  listen(_el72, "click", (e) => { copyToClipboard('npx liquid create my-site'); }, []);
-  const _t73 = text('');
-  bindText(_t73, () => (t('copyCode')));
-  _el72.appendChild(_t73);
-  _el69.appendChild(_el72);
-  _el64.appendChild(_el69);
-  _el61.appendChild(_el64);
-  _el60.appendChild(_el61);
-  const _el74 = element("div", "data-l-26sow2", ["step-card"]);
-  const _el75 = element("div", "data-l-26sow2", ["step-badge"]);
-  const _t76 = text('');
-  bindText(_t76, () => (t('step2Num')));
-  _el75.appendChild(_t76);
-  _el74.appendChild(_el75);
-  const _el77 = element("div", "data-l-26sow2", ["step-content"]);
-  const _el78 = element("h3", "data-l-26sow2", ["step-title"]);
-  const _t79 = text('');
-  bindText(_t79, () => (t('step2Title')));
-  _el78.appendChild(_t79);
-  _el77.appendChild(_el78);
-  const _el80 = element("p", "data-l-26sow2", ["step-desc"]);
-  const _t81 = text('');
-  bindText(_t81, () => (t('step2Desc')));
-  _el80.appendChild(_t81);
-  _el77.appendChild(_el80);
-  const _el82 = element("div", "data-l-26sow2", ["step-code"]);
-  const _el83 = element("span", "data-l-26sow2", null);
-  const _t84 = text("cd my-site && npm run dev");
-  _el83.appendChild(_t84);
-  _el82.appendChild(_el83);
-  const _el85 = element("button", "data-l-26sow2", ["terminal-copy"]);
-  _el85.setAttribute("type", "button");
-  listen(_el85, "click", (e) => { copyToClipboard('cd my-site && npm run dev'); }, []);
-  const _t86 = text('');
-  bindText(_t86, () => (t('copyCode')));
-  _el85.appendChild(_t86);
-  _el82.appendChild(_el85);
-  _el77.appendChild(_el82);
-  _el74.appendChild(_el77);
-  _el60.appendChild(_el74);
-  const _el87 = element("div", "data-l-26sow2", ["step-card"]);
-  const _el88 = element("div", "data-l-26sow2", ["step-badge"]);
-  const _t89 = text('');
-  bindText(_t89, () => (t('step3Num')));
-  _el88.appendChild(_t89);
-  _el87.appendChild(_el88);
-  const _el90 = element("div", "data-l-26sow2", ["step-content"]);
-  const _el91 = element("h3", "data-l-26sow2", ["step-title"]);
-  const _t92 = text('');
-  bindText(_t92, () => (t('step3Title')));
-  _el91.appendChild(_t92);
-  _el90.appendChild(_el91);
-  const _el93 = element("p", "data-l-26sow2", ["step-desc"]);
-  const _t94 = text('');
-  bindText(_t94, () => (t('step3Desc')));
-  _el93.appendChild(_t94);
-  _el90.appendChild(_el93);
-  const _el95 = element("div", "data-l-26sow2", ["step-code"]);
-  const _el96 = element("span", "data-l-26sow2", null);
-  const _t97 = text("liquid edit src/App.liq");
-  _el96.appendChild(_t97);
-  _el95.appendChild(_el96);
-  const _el98 = element("button", "data-l-26sow2", ["terminal-copy"]);
-  _el98.setAttribute("type", "button");
-  listen(_el98, "click", (e) => { copyToClipboard('liquid edit src/App.liq'); }, []);
-  const _t99 = text('');
-  bindText(_t99, () => (t('copyCode')));
-  _el98.appendChild(_t99);
-  _el95.appendChild(_el98);
-  _el90.appendChild(_el95);
-  _el87.appendChild(_el90);
-  _el60.appendChild(_el87);
-  _el54.appendChild(_el60);
-  _el0.appendChild(_el54);
-  const _el100 = element("section", "data-l-26sow2", ["demo-section"]);
-  const _el101 = element("div", "data-l-26sow2", ["section-head"]);
-  const _el102 = element("h2", "data-l-26sow2", ["section-title"]);
-  const _t103 = text("تجربة حية فورية");
+  const _el78 = element("div", "data-l-1xmbid8", ["step-card"]);
+  const _el79 = element("div", "data-l-1xmbid8", ["step-badge"]);
+  const _t80 = text('');
+  bindText(_t80, () => (t('step2Num')));
+  _el79.appendChild(_t80);
+  _el78.appendChild(_el79);
+  const _el81 = element("div", "data-l-1xmbid8", ["step-content"]);
+  const _el82 = element("h3", "data-l-1xmbid8", ["step-title"]);
+  const _t83 = text('');
+  bindText(_t83, () => (t('step2Title')));
+  _el82.appendChild(_t83);
+  _el81.appendChild(_el82);
+  const _el84 = element("p", "data-l-1xmbid8", ["step-desc"]);
+  const _t85 = text('');
+  bindText(_t85, () => (t('step2Desc')));
+  _el84.appendChild(_t85);
+  _el81.appendChild(_el84);
+  const _el86 = element("div", "data-l-1xmbid8", ["step-code"]);
+  const _el87 = element("span", "data-l-1xmbid8", null);
+  const _t88 = text("cd my-site && npm run dev");
+  _el87.appendChild(_t88);
+  _el86.appendChild(_el87);
+  const _el89 = element("button", "data-l-1xmbid8", ["terminal-copy"]);
+  _el89.setAttribute("type", "button");
+  listen(_el89, "click", (e) => { copyToClipboard('cd my-site && npm run dev'); }, []);
+  const _t90 = text('');
+  bindText(_t90, () => (t('copyCode')));
+  _el89.appendChild(_t90);
+  _el86.appendChild(_el89);
+  _el81.appendChild(_el86);
+  _el78.appendChild(_el81);
+  _el64.appendChild(_el78);
+  const _el91 = element("div", "data-l-1xmbid8", ["step-card"]);
+  const _el92 = element("div", "data-l-1xmbid8", ["step-badge"]);
+  const _t93 = text('');
+  bindText(_t93, () => (t('step3Num')));
+  _el92.appendChild(_t93);
+  _el91.appendChild(_el92);
+  const _el94 = element("div", "data-l-1xmbid8", ["step-content"]);
+  const _el95 = element("h3", "data-l-1xmbid8", ["step-title"]);
+  const _t96 = text('');
+  bindText(_t96, () => (t('step3Title')));
+  _el95.appendChild(_t96);
+  _el94.appendChild(_el95);
+  const _el97 = element("p", "data-l-1xmbid8", ["step-desc"]);
+  const _t98 = text('');
+  bindText(_t98, () => (t('step3Desc')));
+  _el97.appendChild(_t98);
+  _el94.appendChild(_el97);
+  const _el99 = element("div", "data-l-1xmbid8", ["step-code"]);
+  const _el100 = element("span", "data-l-1xmbid8", null);
+  const _t101 = text("liquid edit src/App.liq");
+  _el100.appendChild(_t101);
+  _el99.appendChild(_el100);
+  const _el102 = element("button", "data-l-1xmbid8", ["terminal-copy"]);
+  _el102.setAttribute("type", "button");
+  listen(_el102, "click", (e) => { copyToClipboard('liquid edit src/App.liq'); }, []);
+  const _t103 = text('');
+  bindText(_t103, () => (t('copyCode')));
   _el102.appendChild(_t103);
-  _el101.appendChild(_el102);
-  const _el104 = element("p", "data-l-26sow2", ["section-sub"]);
-  const _t105 = text("هذه المكونات تعمل مباشرة بكود Liquid الحقيقي في متصفحك الآن:");
-  _el104.appendChild(_t105);
-  _el101.appendChild(_el104);
-  _el100.appendChild(_el101);
-  const _el106 = element("div", "data-l-26sow2", ["demo-tabs"]);
-  const _el107 = element("button", "data-l-26sow2", ["demo-tab-btn"]);
-  bindAttr(_el107, "class", () => ("demo-tab-btn" + ((activeDemoTab.value === 'counter' ? 'active' : '') ? ' ' + (activeDemoTab.value === 'counter' ? 'active' : '') : '')));
-  _el107.setAttribute("type", "button");
-  listen(_el107, "click", (e) => { setTab('counter'); }, []);
-  const _t108 = text("العداد التفاعلي (Counter)");
-  _el107.appendChild(_t108);
-  _el106.appendChild(_el107);
-  const _el109 = element("button", "data-l-26sow2", ["demo-tab-btn"]);
-  bindAttr(_el109, "class", () => ("demo-tab-btn" + ((activeDemoTab.value === 'todo' ? 'active' : '') ? ' ' + (activeDemoTab.value === 'todo' ? 'active' : '') : '')));
-  _el109.setAttribute("type", "button");
-  listen(_el109, "click", (e) => { setTab('todo'); }, []);
-  const _t110 = text("قائمة المهام (Todo)");
-  _el109.appendChild(_t110);
-  _el106.appendChild(_el109);
-  _el100.appendChild(_el106);
-  const _el111 = element("div", "data-l-26sow2", ["demo-container"]);
-  const _anchor112 = document.createComment('if');
-  _el111.appendChild(_anchor112);
-  createIfBlock(_anchor112, () => (activeDemoTab.value === 'counter'), () => {
-    const _thenNodes113 = [];
-    const _c114 = LiveCounter({  });
-    if (Array.isArray(_c114)) _thenNodes113.push(..._c114); else if (_c114) _thenNodes113.push(_c114);
-    return _thenNodes113;
+  _el99.appendChild(_el102);
+  _el94.appendChild(_el99);
+  _el91.appendChild(_el94);
+  _el64.appendChild(_el91);
+  _el58.appendChild(_el64);
+  _el0.appendChild(_el58);
+  const _el104 = element("section", "data-l-1xmbid8", ["demo-section"]);
+  const _el105 = element("div", "data-l-1xmbid8", ["section-head"]);
+  const _el106 = element("h2", "data-l-1xmbid8", ["section-title"]);
+  const _t107 = text("تجربة حية فورية");
+  _el106.appendChild(_t107);
+  _el105.appendChild(_el106);
+  const _el108 = element("p", "data-l-1xmbid8", ["section-sub"]);
+  const _t109 = text("هذه المكونات تعمل مباشرة بكود Liquid الحقيقي في متصفحك الآن:");
+  _el108.appendChild(_t109);
+  _el105.appendChild(_el108);
+  _el104.appendChild(_el105);
+  const _el110 = element("div", "data-l-1xmbid8", ["demo-tabs"]);
+  const _el111 = element("button", "data-l-1xmbid8", ["demo-tab-btn"]);
+  bindAttr(_el111, "class", () => ("demo-tab-btn" + ((activeDemoTab.value === 'counter' ? 'active' : '') ? ' ' + (activeDemoTab.value === 'counter' ? 'active' : '') : '')));
+  _el111.setAttribute("type", "button");
+  listen(_el111, "click", (e) => { setTab('counter'); }, []);
+  const _t112 = text("العداد التفاعلي (Counter)");
+  _el111.appendChild(_t112);
+  _el110.appendChild(_el111);
+  const _el113 = element("button", "data-l-1xmbid8", ["demo-tab-btn"]);
+  bindAttr(_el113, "class", () => ("demo-tab-btn" + ((activeDemoTab.value === 'todo' ? 'active' : '') ? ' ' + (activeDemoTab.value === 'todo' ? 'active' : '') : '')));
+  _el113.setAttribute("type", "button");
+  listen(_el113, "click", (e) => { setTab('todo'); }, []);
+  const _t114 = text("قائمة المهام (Todo)");
+  _el113.appendChild(_t114);
+  _el110.appendChild(_el113);
+  _el104.appendChild(_el110);
+  const _el115 = element("div", "data-l-1xmbid8", ["demo-container"]);
+  const _anchor116 = document.createComment('if');
+  _el115.appendChild(_anchor116);
+  createIfBlock(_anchor116, () => (activeDemoTab.value === 'counter'), () => {
+    const _thenNodes117 = [];
+    const _c118 = LiveCounter({  });
+    if (Array.isArray(_c118)) _thenNodes117.push(..._c118); else if (_c118) _thenNodes117.push(_c118);
+    return _thenNodes117;
   }, () => {
-    const _elseNodes115 = [];
-    const _c116 = LiveTodo({  });
-    if (Array.isArray(_c116)) _elseNodes115.push(..._c116); else if (_c116) _elseNodes115.push(_c116);
-    return _elseNodes115;
+    const _elseNodes119 = [];
+    const _c120 = LiveTodo({  });
+    if (Array.isArray(_c120)) _elseNodes119.push(..._c120); else if (_c120) _elseNodes119.push(_c120);
+    return _elseNodes119;
   });
-  _el100.appendChild(_el111);
-  _el0.appendChild(_el100);
+  _el104.appendChild(_el115);
+  _el0.appendChild(_el104);
   _root.push(_el0);
   return _root.length === 1 ? _root[0] : _root;
 }
@@ -4504,6 +5557,896 @@ function NotFound(props = {}, context = {}) {
   const _t8 = text("العودة إلى الصفحة الرئيسية");
   _el7.appendChild(_t8);
   _el0.appendChild(_el7);
+  _root.push(_el0);
+  return _root.length === 1 ? _root[0] : _root;
+}
+function Play(props = {}, context = {}) {
+  function defineProps(defaults = {}) { return Object.assign({}, defaults, props); }
+  const profile = signal(loadProfile());
+  effect(() => {
+    saveProfile(profile());
+  });
+  const activeSeasonId = signal(profile().activeSeasonId || 1);
+  const activeModal = signal(null); // { type: 'episode' | 'exam' | 'cert', data: ... }
+  const feedbackMessage = signal('');
+  const feedbackType = signal(''); // 'success' | 'error' | ''
+  const userCode = signal('');
+  const quizSelectedOption = signal(null);
+  const quizSubmitted = signal(false);
+  const examQuestionIndex = signal(0);
+  const examAnswers = signal([]); // array of selected options
+  const examFinished = signal(false);
+  const examScorePercent = signal(0);
+  const rank = computed(() => getRankInfo(profile().xp));
+  const progressPercent = computed(() => {
+    const current = profile().xp - rank().currentBase;
+    const target = rank().nextXp - rank().currentBase;
+    if (target <= 0) return 100;
+    return Math.min(100, Math.max(0, Math.round((current / target) * 100)));
+  });
+  const activeSeason = computed(() => getSeason(activeSeasonId()));
+  function toggleSound() {
+    const current = profile();
+    profile.set({
+      ...current,
+      soundEnabled: !current.soundEnabled
+    });
+  }
+  function selectSeason(id) {
+    if (!profile().unlockedSeasons[id]) {
+      feedbackType.value = 'error';
+      feedbackMessage.value = lang() === 'ar'
+        ? '🔒 هذا الموسم مغلق! يجب اجتياز امتحان الموسم السابق أولاً لفتحه.'
+        : '🔒 This season is locked! Pass the previous season exam to unlock it.';
+      playSound('error', profile().soundEnabled);
+      setTimeout(() => { feedbackMessage.value = ''; }, 3500);
+      return;
+    }
+    activeSeasonId.value = id;
+    const p = profile();
+    profile.set({ ...p, activeSeasonId: id });
+  }
+  function openEpisode(ep) {
+    feedbackMessage.value = '';
+    feedbackType.value = '';
+    quizSelectedOption.value = null;
+    quizSubmitted.value = false;
+    userCode.value = ep.starterCode || '';
+    activeModal.value = { type: 'episode', ep };
+  }
+  function closeModal() {
+    activeModal.value = null;
+    examFinished.value = false;
+    examQuestionIndex.value = 0;
+    examAnswers.value = [];
+  }
+  function verifyCodeChallenge() {
+    const modal = activeModal();
+    if (!modal || modal.type !== 'episode') return;
+    const ep = modal.ep;
+    const result = ep.validate(userCode());
+    if (result.success) {
+      feedbackType.value = 'success';
+      feedbackMessage.value = lang() === 'ar'
+        ? `🎉 أحسنت صنعاً! الكود صحيح 100% وحصلت على +${ep.xp} XP!`
+        : `🎉 Excellent! Code validated successfully. +${ep.xp} XP earned!`;
+      const p = profile();
+      const isFirstTime = !p.completedEpisodes[ep.id];
+      const prevLevel = getRankInfo(p.xp).level;
+      const newXp = isFirstTime ? p.xp + ep.xp : p.xp;
+      const newLevel = getRankInfo(newXp).level;
+      profile.set({
+        ...p,
+        xp: newXp,
+        completedEpisodes: {
+          ...p.completedEpisodes,
+          [ep.id]: true
+        }
+      });
+      if (newLevel > prevLevel) {
+        playSound('levelup', p.soundEnabled);
+      } else {
+        playSound('success', p.soundEnabled);
+      }
+    } else {
+      feedbackType.value = 'error';
+      feedbackMessage.value = lang() === 'ar' ? result.msgAr : result.msgEn;
+      playSound('error', profile().soundEnabled);
+    }
+  }
+  function selectQuizOption(index) {
+    if (quizSubmitted.value) return;
+    quizSelectedOption.value = index;
+  }
+  function submitQuizAnswer() {
+    const modal = activeModal();
+    if (!modal || modal.type !== 'episode') return;
+    const ep = modal.ep;
+    if (quizSelectedOption.value === null) return;
+    quizSubmitted.value = true;
+    const isCorrect = quizSelectedOption.value === ep.correctIndex;
+    if (isCorrect) {
+      feedbackType.value = 'success';
+      feedbackMessage.value = lang() === 'ar'
+        ? `🌟 إجابة صحيحة تماماً! +${ep.xp} XP`
+        : `🌟 Correct answer! +${ep.xp} XP`;
+      const p = profile();
+      const isFirstTime = !p.completedEpisodes[ep.id];
+      const prevLevel = getRankInfo(p.xp).level;
+      const newXp = isFirstTime ? p.xp + ep.xp : p.xp;
+      const newLevel = getRankInfo(newXp).level;
+      profile.set({
+        ...p,
+        xp: newXp,
+        completedEpisodes: {
+          ...p.completedEpisodes,
+          [ep.id]: true
+        }
+      });
+      if (newLevel > prevLevel) {
+        playSound('levelup', p.soundEnabled);
+      } else {
+        playSound('success', p.soundEnabled);
+      }
+    } else {
+      feedbackType.value = 'error';
+      feedbackMessage.value = lang() === 'ar'
+        ? `❌ إجابة غير صحيحة. التوضيح: ${ep.explanationAr}`
+        : `❌ Incorrect. Explanation: ${ep.explanationEn}`;
+      playSound('error', profile().soundEnabled);
+    }
+  }
+  function startExam(season) {
+    feedbackMessage.value = '';
+    feedbackType.value = '';
+    examQuestionIndex.value = 0;
+    examAnswers.value = [];
+    examFinished.value = false;
+    examScorePercent.value = 0;
+    activeModal.value = { type: 'exam', season };
+  }
+  function selectExamOption(qIndex, optIndex) {
+    const answers = [...examAnswers()];
+    answers[qIndex] = optIndex;
+    examAnswers.value = answers;
+  }
+  function nextExamQuestion() {
+    const modal = activeModal();
+    if (!modal || modal.type !== 'exam') return;
+    const total = modal.season.exam.questions.length;
+    if (examQuestionIndex() < total - 1) {
+      examQuestionIndex.value = examQuestionIndex() + 1;
+    }
+  }
+  function prevExamQuestion() {
+    if (examQuestionIndex() > 0) {
+      examQuestionIndex.value = examQuestionIndex() - 1;
+    }
+  }
+  function finishExam() {
+    const modal = activeModal();
+    if (!modal || modal.type !== 'exam') return;
+    const season = modal.season;
+    const questions = season.exam.questions;
+    const answers = examAnswers();
+    let correctCount = 0;
+    questions.forEach((q, idx) => {
+      if (answers[idx] === q.correct) {
+        correctCount++;
+      }
+    });
+    const percent = Math.round((correctCount / questions.length) * 100);
+    examScorePercent.value = percent;
+    examFinished.value = true;
+    const passed = percent >= season.examThreshold;
+    const p = profile();
+    const isFirstPass = !p.passedExams[season.id];
+    if (passed) {
+      const prevLevel = getRankInfo(p.xp).level;
+      const addedXp = isFirstPass ? season.exam.rewardXp : 0;
+      const newXp = p.xp + addedXp;
+      const newLevel = getRankInfo(newXp).level;
+      const nextSeasonId = season.id + 1;
+      const nextUnlocked = { ...p.unlockedSeasons };
+      if (SEASONS.some(s => s.id === nextSeasonId)) {
+        nextUnlocked[nextSeasonId] = true;
+      }
+      profile.set({
+        ...p,
+        xp: newXp,
+        passedExams: {
+          ...p.passedExams,
+          [season.id]: true
+        },
+        examScores: {
+          ...p.examScores,
+          [season.id]: percent
+        },
+        unlockedSeasons: nextUnlocked
+      });
+      playSound('exam', p.soundEnabled);
+    } else {
+      playSound('error', p.soundEnabled);
+    }
+  }
+  function resetAllProgress() {
+    if (typeof window !== 'undefined') {
+      const confirmMsg = lang() === 'ar'
+        ? 'هل أنت متأكد من رغبتك في إعادة تعيين كافة نقاط XP والتقدم والمواسم؟'
+        : 'Are you sure you want to reset all XP points, seasons, and progress?';
+      if (window.confirm(confirmMsg)) {
+        localStorage.removeItem('liquid_play_profile_v1');
+        profile.value = loadProfile();
+        activeSeasonId.value = 1;
+        feedbackType.value = 'success';
+        feedbackMessage.value = lang() === 'ar' ? 'تمت إعادة ضبط التقدم بنجاح.' : 'Progress reset successfully.';
+        setTimeout(() => { feedbackMessage.value = ''; }, 3000);
+      }
+    }
+  }
+  const _root = [];
+  const _el0 = element("div", "data-l-1fa7v8j", ["play-page"]);
+  const _anchor1 = document.createComment('if');
+  _el0.appendChild(_anchor1);
+  createIfBlock(_anchor1, () => (feedbackMessage.value), () => {
+    const _thenNodes2 = [];
+    const _el3 = element("div", "data-l-1fa7v8j", ["feedback-alert"]);
+    bindAttr(_el3, "class", () => ("feedback-alert" + ((feedbackType.value) ? ' ' + (feedbackType.value) : '')));
+    const _t4 = text('');
+    bindText(_t4, () => (feedbackMessage.value));
+    _el3.appendChild(_t4);
+    _thenNodes2.push(_el3);
+    return _thenNodes2;
+  }, null);
+  const _el5 = element("div", "data-l-1fa7v8j", ["hud-card"]);
+  const _el6 = element("div", "data-l-1fa7v8j", ["hud-top"]);
+  const _el7 = element("div", "data-l-1fa7v8j", ["player-info"]);
+  const _el8 = element("div", "data-l-1fa7v8j", ["avatar-badge"]);
+  const _t9 = text('');
+  bindText(_t9, () => (activeSeason().badge));
+  _el8.appendChild(_t9);
+  _el7.appendChild(_el8);
+  const _el10 = element("div", "data-l-1fa7v8j", ["player-details"]);
+  const _el11 = element("h2", "data-l-1fa7v8j", null);
+  const _t12 = text('');
+  bindText(_t12, () => (lang() === 'ar' ? rank().titleAr : rank().titleEn));
+  _el11.appendChild(_t12);
+  _el10.appendChild(_el11);
+  const _el13 = element("p", "data-l-1fa7v8j", null);
+  _el13.setAttribute("style", "margin: 0; color: #94a3b8; font-size: 0.85rem;");
+  const _t14 = text('');
+  bindText(_t14, () => (lang() === 'ar' ? 'أكاديمية ليكويد التفاعلية — المستوى ' + rank().level : 'Liquid Academy — Level ' + rank().level));
+  _el13.appendChild(_t14);
+  _el10.appendChild(_el13);
+  _el7.appendChild(_el10);
+  _el6.appendChild(_el7);
+  const _el15 = element("div", "data-l-1fa7v8j", ["hud-badges"]);
+  const _el16 = element("span", "data-l-1fa7v8j", ["hud-pill"]);
+  const _t17 = text("🔥 ");
+  _el16.appendChild(_t17);
+  const _t18 = text('');
+  bindText(_t18, () => (profile().streak));
+  _el16.appendChild(_t18);
+  const _t19 = text(" ");
+  _el16.appendChild(_t19);
+  const _t20 = text('');
+  bindText(_t20, () => (lang() === 'ar' ? 'أيام متتالية' : 'Day Streak'));
+  _el16.appendChild(_t20);
+  _el15.appendChild(_el16);
+  const _el21 = element("span", "data-l-1fa7v8j", ["hud-pill"]);
+  const _t22 = text("🏆 ");
+  _el21.appendChild(_t22);
+  const _t23 = text('');
+  bindText(_t23, () => (Object.keys(profile().passedExams).length));
+  _el21.appendChild(_t23);
+  const _t24 = text(" / 4 ");
+  _el21.appendChild(_t24);
+  const _t25 = text('');
+  bindText(_t25, () => (lang() === 'ar' ? 'مواسم مكتملة' : 'Seasons'));
+  _el21.appendChild(_t25);
+  _el15.appendChild(_el21);
+  const _el26 = element("button", "data-l-1fa7v8j", ["hud-btn"]);
+  _el26.setAttribute("type", "button");
+  _el26.setAttribute("title", "الصوت / Sound");
+  listen(_el26, "click", toggleSound, []);
+  const _el27 = element("span", "data-l-1fa7v8j", null);
+  const _t28 = text('');
+  bindText(_t28, () => (profile().soundEnabled ? '🔊 صوت مفعّل' : '🔇 صامت'));
+  _el27.appendChild(_t28);
+  _el26.appendChild(_el27);
+  _el15.appendChild(_el26);
+  const _el29 = element("button", "data-l-1fa7v8j", ["hud-btn"]);
+  _el29.setAttribute("type", "button");
+  _el29.setAttribute("title", "إعادة التعيين");
+  listen(_el29, "click", resetAllProgress, []);
+  const _t30 = text("🔄");
+  _el29.appendChild(_t30);
+  _el15.appendChild(_el29);
+  _el6.appendChild(_el15);
+  _el5.appendChild(_el6);
+  const _el31 = element("div", "data-l-1fa7v8j", ["xp-progress-bar-bg"]);
+  const _el32 = element("div", "data-l-1fa7v8j", ["xp-progress-fill"]);
+  bindAttr(_el32, "style", () => ("width: " + progressPercent() + "%;"));
+  _el31.appendChild(_el32);
+  _el5.appendChild(_el31);
+  const _el33 = element("div", "data-l-1fa7v8j", ["xp-stats"]);
+  const _el34 = element("span", "data-l-1fa7v8j", null);
+  const _t35 = text('');
+  bindText(_t35, () => (profile().xp));
+  _el34.appendChild(_t35);
+  const _t36 = text(" XP");
+  _el34.appendChild(_t36);
+  _el33.appendChild(_el34);
+  const _el37 = element("span", "data-l-1fa7v8j", null);
+  const _t38 = text('');
+  bindText(_t38, () => (lang() === 'ar' ? 'المستوى القادم: ' + rank().nextXp + ' XP' : 'Next Level: ' + rank().nextXp + ' XP'));
+  _el37.appendChild(_t38);
+  _el33.appendChild(_el37);
+  _el5.appendChild(_el33);
+  _el0.appendChild(_el5);
+  const _el39 = element("div", "data-l-1fa7v8j", ["seasons-nav"]);
+  const _anchor40 = document.createComment('each');
+  _el39.appendChild(_anchor40);
+  createEachBlock(_anchor40, () => (SEASONS), (s, _idx) => (s.id), (sSig, _idxSig) => {
+    const s = new Proxy(sSig, {
+      get(target, prop) {
+        if (prop === 'isSignal') return true;
+        if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') {
+          return () => target();
+        }
+        const val = target();
+        if (val != null && prop in Object(val)) {
+          const res = val[prop];
+          return typeof res === 'function' ? res.bind(val) : res;
+        }
+        return val;
+      },
+      apply(target) { return target(); }
+    });
+    const _idx = new Proxy(_idxSig, {
+      apply(target) { return target(); },
+      get(target, prop) {
+        if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') return () => target();
+        const val = target();
+        if (val != null && prop in Object(val)) {
+          const res = val[prop];
+          return typeof res === 'function' ? res.bind(val) : res;
+        }
+        return val;
+      }
+    });
+    const _eachNodes41 = [];
+    const _el42 = element("div", "data-l-1fa7v8j", ["season-tab"]);
+    bindAttr(_el42, "class", () => ("season-tab" + (((activeSeasonId() === s.id ? 'active' : '') + (!profile().unlockedSeasons[s.id] ? ' locked' : '')) ? ' ' + ((activeSeasonId() === s.id ? 'active' : '') + (!profile().unlockedSeasons[s.id] ? ' locked' : '')) : '')));
+    listen(_el42, "click", (e) => { selectSeason(s.id); }, []);
+    const _el43 = element("div", "data-l-1fa7v8j", ["season-header-row"]);
+    const _el44 = element("span", "data-l-1fa7v8j", ["season-badge-icon"]);
+    const _t45 = text('');
+    bindText(_t45, () => (s.badge));
+    _el44.appendChild(_t45);
+    _el43.appendChild(_el44);
+    const _anchor46 = document.createComment('if');
+    _el43.appendChild(_anchor46);
+    createIfBlock(_anchor46, () => (profile().passedExams[s.id]), () => {
+      const _thenNodes47 = [];
+      const _el48 = element("span", "data-l-1fa7v8j", ["season-trophy"]);
+      const _t49 = text("🏆");
+      _el48.appendChild(_t49);
+      _thenNodes47.push(_el48);
+      return _thenNodes47;
+    }, () => {
+      const _elseNodes50 = [];
+      const _anchor51 = document.createComment('if');
+      _elseNodes50.push(_anchor51);
+      createIfBlock(_anchor51, () => (!profile().unlockedSeasons[s.id]), () => {
+      const _thenNodes52 = [];
+      const _el53 = element("span", "data-l-1fa7v8j", ["season-trophy"]);
+      const _t54 = text("🔒");
+      _el53.appendChild(_t54);
+      _thenNodes52.push(_el53);
+      return _thenNodes52;
+    }, null);
+      return _elseNodes50;
+    });
+    _el42.appendChild(_el43);
+    const _el55 = element("h4", "data-l-1fa7v8j", ["season-title"]);
+    const _t56 = text('');
+    bindText(_t56, () => (lang() === 'ar' ? s.titleAr : s.titleEn));
+    _el55.appendChild(_t56);
+    _el42.appendChild(_el55);
+    const _el57 = element("p", "data-l-1fa7v8j", ["season-meta"]);
+    const _t58 = text('');
+    bindText(_t58, () => (s.episodes.length));
+    _el57.appendChild(_t58);
+    const _t59 = text(" ");
+    _el57.appendChild(_t59);
+    const _t60 = text('');
+    bindText(_t60, () => (lang() === 'ar' ? 'كبسولات تفاعلية' : 'Micro-lessons'));
+    _el57.appendChild(_t60);
+    const _t61 = text(" • ");
+    _el57.appendChild(_t61);
+    const _t62 = text('');
+    bindText(_t62, () => (s.totalXp));
+    _el57.appendChild(_t62);
+    const _t63 = text(" XP");
+    _el57.appendChild(_t63);
+    _el42.appendChild(_el57);
+    _eachNodes41.push(_el42);
+    return _eachNodes41;
+  });
+  _el0.appendChild(_el39);
+  const _el64 = element("div", "data-l-1fa7v8j", ["episodes-section"]);
+  const _el65 = element("h3", "data-l-1fa7v8j", null);
+  const _t66 = text('');
+  bindText(_t66, () => (lang() === 'ar' ? activeSeason().titleAr : activeSeason().titleEn));
+  _el65.appendChild(_t66);
+  _el64.appendChild(_el65);
+  const _el67 = element("p", "data-l-1fa7v8j", ["episodes-desc"]);
+  const _t68 = text('');
+  bindText(_t68, () => (lang() === 'ar' ? activeSeason().descriptionAr : activeSeason().descriptionEn));
+  _el67.appendChild(_t68);
+  _el64.appendChild(_el67);
+  const _el69 = element("div", "data-l-1fa7v8j", ["episodes-grid"]);
+  const _anchor70 = document.createComment('each');
+  _el69.appendChild(_anchor70);
+  createEachBlock(_anchor70, () => (activeSeason().episodes), (ep, _idx) => (ep.id), (epSig, _idxSig) => {
+    const ep = new Proxy(epSig, {
+      get(target, prop) {
+        if (prop === 'isSignal') return true;
+        if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') {
+          return () => target();
+        }
+        const val = target();
+        if (val != null && prop in Object(val)) {
+          const res = val[prop];
+          return typeof res === 'function' ? res.bind(val) : res;
+        }
+        return val;
+      },
+      apply(target) { return target(); }
+    });
+    const _idx = new Proxy(_idxSig, {
+      apply(target) { return target(); },
+      get(target, prop) {
+        if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') return () => target();
+        const val = target();
+        if (val != null && prop in Object(val)) {
+          const res = val[prop];
+          return typeof res === 'function' ? res.bind(val) : res;
+        }
+        return val;
+      }
+    });
+    const _eachNodes71 = [];
+    const _el72 = element("div", "data-l-1fa7v8j", ["episode-card"]);
+    bindAttr(_el72, "class", () => ("episode-card" + ((profile().completedEpisodes[ep.id] ? 'completed' : '') ? ' ' + (profile().completedEpisodes[ep.id] ? 'completed' : '') : '')));
+    listen(_el72, "click", (e) => { openEpisode(ep); }, []);
+    const _el73 = element("div", "data-l-1fa7v8j", null);
+    const _el74 = element("div", "data-l-1fa7v8j", ["ep-header"]);
+    const _el75 = element("span", "data-l-1fa7v8j", ["ep-type-pill"]);
+    const _t76 = text('');
+    bindText(_t76, () => (ep.type === 'code' ? (lang() === 'ar' ? '💻 تحدي برمجي' : '💻 Code') : (lang() === 'ar' ? '🧠 اختبار سريع' : '🧠 Quiz')));
+    _el75.appendChild(_t76);
+    _el74.appendChild(_el75);
+    const _el77 = element("span", "data-l-1fa7v8j", ["ep-xp-pill"]);
+    const _t78 = text("+");
+    _el77.appendChild(_t78);
+    const _t79 = text('');
+    bindText(_t79, () => (ep.xp));
+    _el77.appendChild(_t79);
+    const _t80 = text(" XP");
+    _el77.appendChild(_t80);
+    _el74.appendChild(_el77);
+    _el73.appendChild(_el74);
+    const _el81 = element("h4", "data-l-1fa7v8j", ["ep-title"]);
+    const _t82 = text('');
+    bindText(_t82, () => (lang() === 'ar' ? ep.titleAr : ep.titleEn));
+    _el81.appendChild(_t82);
+    _el73.appendChild(_el81);
+    const _el83 = element("p", "data-l-1fa7v8j", ["ep-summary"]);
+    const _t84 = text('');
+    bindText(_t84, () => (lang() === 'ar' ? ep.summaryAr : ep.summaryEn));
+    _el83.appendChild(_t84);
+    _el73.appendChild(_el83);
+    _el72.appendChild(_el73);
+    const _el85 = element("div", "data-l-1fa7v8j", ["ep-footer"]);
+    const _anchor86 = document.createComment('if');
+    _el85.appendChild(_anchor86);
+    createIfBlock(_anchor86, () => (profile().completedEpisodes[ep.id]), () => {
+      const _thenNodes87 = [];
+      const _el88 = element("span", "data-l-1fa7v8j", null);
+      _el88.setAttribute("style", "color: #10b981; font-weight: 700;");
+      const _t89 = text("✓ ");
+      _el88.appendChild(_t89);
+      const _t90 = text('');
+      bindText(_t90, () => (lang() === 'ar' ? 'تم الإنجاز' : 'Completed'));
+      _el88.appendChild(_t90);
+      _thenNodes87.push(_el88);
+      return _thenNodes87;
+    }, () => {
+      const _elseNodes91 = [];
+      const _el92 = element("span", "data-l-1fa7v8j", null);
+      _el92.setAttribute("style", "color: var(--text-muted);");
+      const _t93 = text("⏳ ");
+      _el92.appendChild(_t93);
+      const _t94 = text('');
+      bindText(_t94, () => (lang() === 'ar' ? 'جاهز للتحدي' : 'Ready'));
+      _el92.appendChild(_t94);
+      _elseNodes91.push(_el92);
+      return _elseNodes91;
+    });
+    const _el95 = element("button", "data-l-1fa7v8j", ["btn-open-ep"]);
+    const _t96 = text('');
+    bindText(_t96, () => (profile().completedEpisodes[ep.id] ? (lang() === 'ar' ? 'مراجعة' : 'Review') : (lang() === 'ar' ? 'ابدأ الكبسولة' : 'Start')));
+    _el95.appendChild(_t96);
+    _el85.appendChild(_el95);
+    _el72.appendChild(_el85);
+    _eachNodes71.push(_el72);
+    return _eachNodes71;
+  });
+  _el64.appendChild(_el69);
+  const _el97 = element("div", "data-l-1fa7v8j", ["boss-banner"]);
+  const _el98 = element("div", "data-l-1fa7v8j", null);
+  const _el99 = element("h4", "data-l-1fa7v8j", ["boss-title"]);
+  const _t100 = text('');
+  bindText(_t100, () => (lang() === 'ar' ? activeSeason().exam.titleAr : activeSeason().exam.titleEn));
+  _el99.appendChild(_t100);
+  _el98.appendChild(_el99);
+  const _el101 = element("p", "data-l-1fa7v8j", ["boss-desc"]);
+  const _t102 = text('');
+  bindText(_t102, () => (lang() === 'ar' ? 'اختبر كل ما تعلمته في هذا الموسم! النجاح بنسبة 80% يفتح الموسم التالي ويمنحك شارة التميز و +' + activeSeason().exam.rewardXp + ' XP.' : 'Test everything in this season! Passing at 80% unlocks the next season and grants +' + activeSeason().exam.rewardXp + ' XP.'));
+  _el101.appendChild(_t102);
+  _el98.appendChild(_el101);
+  _el97.appendChild(_el98);
+  const _el103 = element("div", "data-l-1fa7v8j", null);
+  const _anchor104 = document.createComment('if');
+  _el103.appendChild(_anchor104);
+  createIfBlock(_anchor104, () => (profile().passedExams[activeSeason().id]), () => {
+    const _thenNodes105 = [];
+    const _el106 = element("button", "data-l-1fa7v8j", ["btn-boss"]);
+    listen(_el106, "click", (e) => { startExam(activeSeason()); }, []);
+    const _t107 = text("🏆 ");
+    _el106.appendChild(_t107);
+    const _t108 = text('');
+    bindText(_t108, () => (lang() === 'ar' ? 'إعادة الاختبار (النتيجة: ' + profile().examScores[activeSeason().id] + '%)' : 'Retake Exam (' + profile().examScores[activeSeason().id] + '%)'));
+    _el106.appendChild(_t108);
+    _thenNodes105.push(_el106);
+    return _thenNodes105;
+  }, () => {
+    const _elseNodes109 = [];
+    const _el110 = element("button", "data-l-1fa7v8j", ["btn-boss"]);
+    listen(_el110, "click", (e) => { startExam(activeSeason()); }, []);
+    const _t111 = text("⚔️ ");
+    _el110.appendChild(_t111);
+    const _t112 = text('');
+    bindText(_t112, () => (lang() === 'ar' ? 'بدء امتحان نهاية الموسم' : 'Start Boss Exam'));
+    _el110.appendChild(_t112);
+    _elseNodes109.push(_el110);
+    return _elseNodes109;
+  });
+  _el97.appendChild(_el103);
+  _el64.appendChild(_el97);
+  _el0.appendChild(_el64);
+  const _anchor113 = document.createComment('if');
+  _el0.appendChild(_anchor113);
+  createIfBlock(_anchor113, () => (activeModal() && activeModal().type === 'episode'), () => {
+    const _thenNodes114 = [];
+    const _el115 = element("div", "data-l-1fa7v8j", ["modal-overlay"]);
+    const _el116 = element("div", "data-l-1fa7v8j", ["modal-content"]);
+    const _el117 = element("div", "data-l-1fa7v8j", ["modal-header"]);
+    const _el118 = element("h3", "data-l-1fa7v8j", null);
+    const _t119 = text('');
+    bindText(_t119, () => (lang() === 'ar' ? activeModal().ep.titleAr : activeModal().ep.titleEn));
+    _el118.appendChild(_t119);
+    _el117.appendChild(_el118);
+    const _el120 = element("button", "data-l-1fa7v8j", ["modal-close"]);
+    listen(_el120, "click", closeModal, []);
+    const _t121 = text("✕");
+    _el120.appendChild(_t121);
+    _el117.appendChild(_el120);
+    _el116.appendChild(_el117);
+    const _el122 = element("div", "data-l-1fa7v8j", ["modal-body"]);
+    const _el123 = element("div", "data-l-1fa7v8j", ["lesson-box"]);
+    const _el124 = element("p", "data-l-1fa7v8j", null);
+    _el124.setAttribute("style", "margin: 0; white-space: pre-line;");
+    const _t125 = text('');
+    bindText(_t125, () => (lang() === 'ar' ? activeModal().ep.theoryAr : activeModal().ep.theoryEn));
+    _el124.appendChild(_t125);
+    _el123.appendChild(_el124);
+    _el122.appendChild(_el123);
+    const _anchor126 = document.createComment('if');
+    _el122.appendChild(_anchor126);
+    createIfBlock(_anchor126, () => (feedbackMessage.value), () => {
+      const _thenNodes127 = [];
+      const _el128 = element("div", "data-l-1fa7v8j", ["feedback-alert"]);
+      bindAttr(_el128, "class", () => ("feedback-alert" + ((feedbackType.value) ? ' ' + (feedbackType.value) : '')));
+      const _t129 = text('');
+      bindText(_t129, () => (feedbackMessage.value));
+      _el128.appendChild(_t129);
+      _thenNodes127.push(_el128);
+      return _thenNodes127;
+    }, null);
+    const _el130 = element("div", "data-l-1fa7v8j", ["challenge-box"]);
+    const _anchor131 = document.createComment('if');
+    _el130.appendChild(_anchor131);
+    createIfBlock(_anchor131, () => (activeModal().ep.type === 'code'), () => {
+      const _thenNodes132 = [];
+      const _el133 = element("p", "data-l-1fa7v8j", null);
+      _el133.setAttribute("style", "font-weight: 700; margin-bottom: 0.5rem;");
+      const _t134 = text('');
+      bindText(_t134, () => (lang() === 'ar' ? activeModal().ep.challengePromptAr : activeModal().ep.challengePromptEn));
+      _el133.appendChild(_t134);
+      _thenNodes132.push(_el133);
+      const _el135 = element("textarea", "data-l-1fa7v8j", ["code-editor-area"]);
+      bindInput(_el135, userCode, "bind");
+      _thenNodes132.push(_el135);
+      const _el136 = element("button", "data-l-1fa7v8j", ["btn-primary-action"]);
+      listen(_el136, "click", verifyCodeChallenge, []);
+      const _t137 = text("🚀 ");
+      _el136.appendChild(_t137);
+      const _t138 = text('');
+      bindText(_t138, () => (lang() === 'ar' ? 'فحص الكود والترجمة المباشرة' : 'Verify & Live Compile'));
+      _el136.appendChild(_t138);
+      _thenNodes132.push(_el136);
+      return _thenNodes132;
+    }, () => {
+      const _elseNodes139 = [];
+      const _el140 = element("p", "data-l-1fa7v8j", null);
+      _el140.setAttribute("style", "font-weight: 700; margin-bottom: 1rem;");
+      const _t141 = text('');
+      bindText(_t141, () => (lang() === 'ar' ? activeModal().ep.questionAr : activeModal().ep.questionEn));
+      _el140.appendChild(_t141);
+      _elseNodes139.push(_el140);
+      const _anchor142 = document.createComment('each');
+      _elseNodes139.push(_anchor142);
+      createEachBlock(_anchor142, () => (activeModal().ep.options), (opt, _idx) => (opt), (optSig, _idxSig) => {
+      const opt = new Proxy(optSig, {
+        get(target, prop) {
+          if (prop === 'isSignal') return true;
+          if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') {
+            return () => target();
+          }
+          const val = target();
+          if (val != null && prop in Object(val)) {
+            const res = val[prop];
+            return typeof res === 'function' ? res.bind(val) : res;
+          }
+          return val;
+        },
+        apply(target) { return target(); }
+      });
+      const _idx = new Proxy(_idxSig, {
+        apply(target) { return target(); },
+        get(target, prop) {
+          if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') return () => target();
+          const val = target();
+          if (val != null && prop in Object(val)) {
+            const res = val[prop];
+            return typeof res === 'function' ? res.bind(val) : res;
+          }
+          return val;
+        }
+      });
+      const _eachNodes143 = [];
+      const _el144 = element("button", "data-l-1fa7v8j", ["quiz-option-btn"]);
+      bindAttr(_el144, "class", () => ("quiz-option-btn" + ((quizSelectedOption() === activeModal().ep.options.indexOf(opt) ? 'selected' : '') ? ' ' + (quizSelectedOption() === activeModal().ep.options.indexOf(opt) ? 'selected' : '') : '')));
+      listen(_el144, "click", (e) => { selectQuizOption(activeModal().ep.options.indexOf(opt)); }, []);
+      const _t145 = text('');
+      bindText(_t145, () => (opt));
+      _el144.appendChild(_t145);
+      _eachNodes143.push(_el144);
+      return _eachNodes143;
+    });
+      const _el146 = element("div", "data-l-1fa7v8j", null);
+      _el146.setAttribute("style", "margin-top: 1rem;");
+      const _el147 = element("button", "data-l-1fa7v8j", ["btn-primary-action"]);
+      listen(_el147, "click", submitQuizAnswer, []);
+      const _t148 = text("🎯 ");
+      _el147.appendChild(_t148);
+      const _t149 = text('');
+      bindText(_t149, () => (lang() === 'ar' ? 'تأكيد الإجابة' : 'Submit Answer'));
+      _el147.appendChild(_t149);
+      _el146.appendChild(_el147);
+      _elseNodes139.push(_el146);
+      return _elseNodes139;
+    });
+    _el122.appendChild(_el130);
+    _el116.appendChild(_el122);
+    _el115.appendChild(_el116);
+    _thenNodes114.push(_el115);
+    return _thenNodes114;
+  }, null);
+  const _anchor150 = document.createComment('if');
+  _el0.appendChild(_anchor150);
+  createIfBlock(_anchor150, () => (activeModal() && activeModal().type === 'exam'), () => {
+    const _thenNodes151 = [];
+    const _el152 = element("div", "data-l-1fa7v8j", ["modal-overlay"]);
+    const _el153 = element("div", "data-l-1fa7v8j", ["modal-content"]);
+    const _el154 = element("div", "data-l-1fa7v8j", ["modal-header"]);
+    const _el155 = element("h3", "data-l-1fa7v8j", null);
+    const _t156 = text('');
+    bindText(_t156, () => (lang() === 'ar' ? activeModal().season.exam.titleAr : activeModal().season.exam.titleEn));
+    _el155.appendChild(_t156);
+    _el154.appendChild(_el155);
+    const _el157 = element("button", "data-l-1fa7v8j", ["modal-close"]);
+    listen(_el157, "click", closeModal, []);
+    const _t158 = text("✕");
+    _el157.appendChild(_t158);
+    _el154.appendChild(_el157);
+    _el153.appendChild(_el154);
+    const _el159 = element("div", "data-l-1fa7v8j", ["modal-body"]);
+    const _anchor160 = document.createComment('if');
+    _el159.appendChild(_anchor160);
+    createIfBlock(_anchor160, () => (!examFinished()), () => {
+      const _thenNodes161 = [];
+      const _el162 = element("div", "data-l-1fa7v8j", ["exam-header-bar"]);
+      const _el163 = element("span", "data-l-1fa7v8j", null);
+      const _t164 = text('');
+      bindText(_t164, () => (lang() === 'ar' ? 'السؤال ' + (examQuestionIndex() + 1) + ' من ' + activeModal().season.exam.questions.length : 'Question ' + (examQuestionIndex() + 1) + ' of ' + activeModal().season.exam.questions.length));
+      _el163.appendChild(_t164);
+      _el162.appendChild(_el163);
+      const _el165 = element("span", "data-l-1fa7v8j", null);
+      const _t166 = text("⚔️ ");
+      _el165.appendChild(_t166);
+      const _t167 = text('');
+      bindText(_t167, () => (lang() === 'ar' ? 'نسبة النجاح المطلوبة: ' + activeModal().season.examThreshold + '%' : 'Pass: ' + activeModal().season.examThreshold + '%'));
+      _el165.appendChild(_t167);
+      _el162.appendChild(_el165);
+      _thenNodes161.push(_el162);
+      const _el168 = element("h4", "data-l-1fa7v8j", null);
+      _el168.setAttribute("style", "font-size: 1.15rem; margin-bottom: 1.25rem;");
+      const _t169 = text('');
+      bindText(_t169, () => (lang() === 'ar' ? activeModal().season.exam.questions[examQuestionIndex()].qAr : activeModal().season.exam.questions[examQuestionIndex()].qEn));
+      _el168.appendChild(_t169);
+      _thenNodes161.push(_el168);
+      const _anchor170 = document.createComment('each');
+      _thenNodes161.push(_anchor170);
+      createEachBlock(_anchor170, () => (activeModal().season.exam.questions[examQuestionIndex()].options), (opt, _idx) => (opt), (optSig, _idxSig) => {
+      const opt = new Proxy(optSig, {
+        get(target, prop) {
+          if (prop === 'isSignal') return true;
+          if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') {
+            return () => target();
+          }
+          const val = target();
+          if (val != null && prop in Object(val)) {
+            const res = val[prop];
+            return typeof res === 'function' ? res.bind(val) : res;
+          }
+          return val;
+        },
+        apply(target) { return target(); }
+      });
+      const _idx = new Proxy(_idxSig, {
+        apply(target) { return target(); },
+        get(target, prop) {
+          if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') return () => target();
+          const val = target();
+          if (val != null && prop in Object(val)) {
+            const res = val[prop];
+            return typeof res === 'function' ? res.bind(val) : res;
+          }
+          return val;
+        }
+      });
+      const _eachNodes171 = [];
+      const _el172 = element("button", "data-l-1fa7v8j", ["quiz-option-btn"]);
+      bindAttr(_el172, "class", () => ("quiz-option-btn" + ((examAnswers()[examQuestionIndex()] === activeModal().season.exam.questions[examQuestionIndex()].options.indexOf(opt) ? 'selected' : '') ? ' ' + (examAnswers()[examQuestionIndex()] === activeModal().season.exam.questions[examQuestionIndex()].options.indexOf(opt) ? 'selected' : '') : '')));
+      listen(_el172, "click", (e) => { selectExamOption(examQuestionIndex(), activeModal().season.exam.questions[examQuestionIndex()].options.indexOf(opt)); }, []);
+      const _t173 = text('');
+      bindText(_t173, () => (opt));
+      _el172.appendChild(_t173);
+      _eachNodes171.push(_el172);
+      return _eachNodes171;
+    });
+      const _el174 = element("div", "data-l-1fa7v8j", ["exam-nav-btns"]);
+      const _anchor175 = document.createComment('if');
+      _el174.appendChild(_anchor175);
+      createIfBlock(_anchor175, () => (examQuestionIndex() > 0), () => {
+      const _thenNodes176 = [];
+      const _el177 = element("button", "data-l-1fa7v8j", ["hud-btn"]);
+      listen(_el177, "click", prevExamQuestion, []);
+      const _t178 = text("← ");
+      _el177.appendChild(_t178);
+      const _t179 = text('');
+      bindText(_t179, () => (lang() === 'ar' ? 'السابق' : 'Previous'));
+      _el177.appendChild(_t179);
+      _thenNodes176.push(_el177);
+      return _thenNodes176;
+    }, () => {
+      const _elseNodes180 = [];
+      const _el181 = element("span", "data-l-1fa7v8j", null);
+      _elseNodes180.push(_el181);
+      return _elseNodes180;
+    });
+      const _anchor182 = document.createComment('if');
+      _el174.appendChild(_anchor182);
+      createIfBlock(_anchor182, () => (examQuestionIndex() < activeModal().season.exam.questions.length - 1), () => {
+      const _thenNodes183 = [];
+      const _el184 = element("button", "data-l-1fa7v8j", ["btn-primary-action"]);
+      listen(_el184, "click", nextExamQuestion, []);
+      const _t185 = text('');
+      bindText(_t185, () => (lang() === 'ar' ? 'التالي' : 'Next'));
+      _el184.appendChild(_t185);
+      const _t186 = text(" →");
+      _el184.appendChild(_t186);
+      _thenNodes183.push(_el184);
+      return _thenNodes183;
+    }, () => {
+      const _elseNodes187 = [];
+      const _el188 = element("button", "data-l-1fa7v8j", ["btn-primary-action"]);
+      listen(_el188, "click", finishExam, []);
+      const _t189 = text("🏁 ");
+      _el188.appendChild(_t189);
+      const _t190 = text('');
+      bindText(_t190, () => (lang() === 'ar' ? 'إنهاء وحساب النتيجة' : 'Finish & Grade'));
+      _el188.appendChild(_t190);
+      _elseNodes187.push(_el188);
+      return _elseNodes187;
+    });
+      _thenNodes161.push(_el174);
+      return _thenNodes161;
+    }, () => {
+      const _elseNodes191 = [];
+      const _el192 = element("div", "data-l-1fa7v8j", ["exam-summary-card"]);
+      const _el193 = element("div", "data-l-1fa7v8j", ["exam-result-score"]);
+      const _t194 = text('');
+      bindText(_t194, () => (examScorePercent()));
+      _el193.appendChild(_t194);
+      const _t195 = text("%");
+      _el193.appendChild(_t195);
+      _el192.appendChild(_el193);
+      const _anchor196 = document.createComment('if');
+      _el192.appendChild(_anchor196);
+      createIfBlock(_anchor196, () => (examScorePercent() >= activeModal().season.examThreshold), () => {
+      const _thenNodes197 = [];
+      const _el198 = element("h3", "data-l-1fa7v8j", null);
+      _el198.setAttribute("style", "color: #10b981; margin: 0 0 0.5rem;");
+      const _t199 = text("🎉 ");
+      _el198.appendChild(_t199);
+      const _t200 = text('');
+      bindText(_t200, () => (lang() === 'ar' ? 'مبارك! لقد اجتزت امتحان الموسم بنجاح!' : 'Congratulations! You passed the season exam!'));
+      _el198.appendChild(_t200);
+      _thenNodes197.push(_el198);
+      const _el201 = element("p", "data-l-1fa7v8j", null);
+      _el201.setAttribute("style", "color: var(--text-muted); margin-bottom: 1.5rem;");
+      const _t202 = text('');
+      bindText(_t202, () => (lang() === 'ar' ? 'تم فتح الموسم التالي وحصلت على +' + activeModal().season.exam.rewardXp + ' XP و ' + activeModal().season.badgeNameAr : 'Next season unlocked! +' + activeModal().season.exam.rewardXp + ' XP earned.'));
+      _el201.appendChild(_t202);
+      _thenNodes197.push(_el201);
+      return _thenNodes197;
+    }, () => {
+      const _elseNodes203 = [];
+      const _el204 = element("h3", "data-l-1fa7v8j", null);
+      _el204.setAttribute("style", "color: #ef4444; margin: 0 0 0.5rem;");
+      const _t205 = text("🔄 ");
+      _el204.appendChild(_t205);
+      const _t206 = text('');
+      bindText(_t206, () => (lang() === 'ar' ? 'لم تجتز النسبة المطلوبة (80%)' : 'Did not pass (80% required)'));
+      _el204.appendChild(_t206);
+      _elseNodes203.push(_el204);
+      const _el207 = element("p", "data-l-1fa7v8j", null);
+      _el207.setAttribute("style", "color: var(--text-muted); margin-bottom: 1.5rem;");
+      const _t208 = text('');
+      bindText(_t208, () => (lang() === 'ar' ? 'راجع كبسولات الموسم وحاول مجدداً لتفوز بالشارة!' : 'Review the season lessons and retry to win the badge!'));
+      _el207.appendChild(_t208);
+      _elseNodes203.push(_el207);
+      return _elseNodes203;
+    });
+      const _el209 = element("button", "data-l-1fa7v8j", ["btn-primary-action"]);
+      listen(_el209, "click", closeModal, []);
+      const _t210 = text('');
+      bindText(_t210, () => (lang() === 'ar' ? 'إغلاق ومتابعة التعلم' : 'Close and Continue'));
+      _el209.appendChild(_t210);
+      _el192.appendChild(_el209);
+      _elseNodes191.push(_el192);
+      return _elseNodes191;
+    });
+    _el153.appendChild(_el159);
+    _el152.appendChild(_el153);
+    _thenNodes151.push(_el152);
+    return _thenNodes151;
+  }, null);
   _root.push(_el0);
   return _root.length === 1 ? _root[0] : _root;
 }

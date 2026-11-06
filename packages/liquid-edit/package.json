@@ -1,6 +1,6 @@
 {
   "name": "@mkdevofficial/liquid-edit",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "🫟 liquid-edit: Phone-first, Termux-friendly TUI code editor for Liquid and modern web code",
   "type": "module",
   "main": "src/index.js",
@@ -17,7 +17,7 @@
     "demo"
   ],
   "dependencies": {
-    "@mkdevofficial/liquid-compiler": "^0.2.0"
+    "@mkdevofficial/liquid-compiler": "^0.3.0"
   },
   "publishConfig": {
     "access": "public"

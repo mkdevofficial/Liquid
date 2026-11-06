@@ -105,6 +105,18 @@ function setTab(tab) {
   border-color: var(--primary);
 }
 
+.cta-btn.play {
+  background: linear-gradient(135deg, #0284c7, #8b5cf6);
+  color: white;
+  border: none;
+  box-shadow: 0 8px 24px -4px rgba(139, 92, 246, 0.5);
+}
+
+.cta-btn.play:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px -4px rgba(139, 92, 246, 0.7);
+}
+
 .terminal-card {
   background: #0f172a;
   border: 1px solid #1e293b;
@@ -376,6 +388,8 @@ div.home-page
     div.hero-cta
       button.cta-btn.primary type="button" @click=navigate('/guide')
         span {t('btnStartLearning')}
+      button.cta-btn.play type="button" @click=navigate('/play')
+        span 🎮 {t('navPlay')}
       button.cta-btn.secondary type="button" @click=navigate('/playground')
         span {t('btnTryPlayground')}
 

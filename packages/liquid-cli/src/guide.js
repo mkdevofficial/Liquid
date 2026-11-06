@@ -70,6 +70,13 @@ export async function guideCommand(options = {}) {
     const parsedUrl = new URL(req.url, `http://${host}:${port}`);
     let pathname = decodeURIComponent(parsedUrl.pathname);
 
+    // If launched with --play, redirect root navigation to the gamified arena
+    if (options.play && (pathname === '/' || pathname === '')) {
+      res.writeHead(302, { 'Location': '/#/play' });
+      res.end();
+      return;
+    }
+
     if (pathname === '/' || pathname === '') {
       pathname = '/index.html';
     }
@@ -99,8 +106,15 @@ export async function guideCommand(options = {}) {
   return new Promise((resolve) => {
     server.listen(port, host, () => {
       printServerUrls({ port, host });
-      console.log(`  \x1b[35m➜\x1b[0m  \x1b[1mErrors:\x1b[0m   \x1b[35mhttp://localhost:${port}/#/errors\x1b[0m`);
-      console.log('  \x1b[90mServing official guide & error catalog. Press Ctrl+C to stop.\x1b[0m\n');
+      if (options.play) {
+        console.log(`  \x1b[36m➜\x1b[0m  \x1b[1;33m🎮 Play Arena:\x1b[0m  \x1b[36;1mhttp://localhost:${port}/#/play\x1b[0m`);
+        console.log(`  \x1b[35m➜\x1b[0m  \x1b[1mErrors:\x1b[0m        \x1b[35mhttp://localhost:${port}/#/errors\x1b[0m`);
+        console.log('  \x1b[32m✔ Gamified Microlearning arena launched! Earn XP and conquer Seasons.\x1b[0m\n');
+      } else {
+        console.log(`  \x1b[33m➜\x1b[0m  \x1b[1m🎮 Play Arena:\x1b[0m  \x1b[33mhttp://localhost:${port}/#/play\x1b[0m`);
+        console.log(`  \x1b[35m➜\x1b[0m  \x1b[1mErrors:\x1b[0m        \x1b[35mhttp://localhost:${port}/#/errors\x1b[0m`);
+        console.log('  \x1b[90mServing official guide & error catalog. Press Ctrl+C to stop.\x1b[0m\n');
+      }
       resolve(server);
     });
   });

@@ -259,7 +259,38 @@ test('Liquid Documentation & Guide Website ("Learn Liquid") E2E in Chromium', as
       });
       assert.strictEqual(lq101Card.result.value, true, 'LQ-101 error card must be rendered in DOM');
 
-      // 8. Test Language Toggle (AR -> EN -> AR)
+      // 8. Test Navigation to Play Arena (#/play - Gamified Microlearning)
+      await send('Runtime.evaluate', {
+        expression: `window.location.hash = '#/play'`
+      });
+      await new Promise(r => setTimeout(r, 400));
+
+      const playPageExists = await send('Runtime.evaluate', {
+        expression: `Boolean(document.querySelector('.play-page'))`
+      });
+      assert.strictEqual(playPageExists.result.value, true, 'Play Arena (.play-page) must be rendered in DOM');
+
+      const hudExists = await send('Runtime.evaluate', {
+        expression: `Boolean(document.querySelector('.hud-card'))`
+      });
+      assert.strictEqual(hudExists.result.value, true, 'Gaming HUD (.hud-card) must exist');
+
+      const seasonTabsCount = await send('Runtime.evaluate', {
+        expression: `document.querySelectorAll('.season-tab').length`
+      });
+      assert.strictEqual(seasonTabsCount.result.value, 4, 'All 4 seasons must be rendered');
+
+      const episodeCardsCount = await send('Runtime.evaluate', {
+        expression: `document.querySelectorAll('.episode-card').length`
+      });
+      assert.ok(episodeCardsCount.result.value >= 4, 'Current season episodes must be rendered');
+
+      const bossButtonExists = await send('Runtime.evaluate', {
+        expression: `Boolean(document.querySelector('.btn-boss'))`
+      });
+      assert.strictEqual(bossButtonExists.result.value, true, 'Boss Exam action button must exist');
+
+      // 9. Test Language Toggle (AR -> EN -> AR)
       const initialDir = await send('Runtime.evaluate', {
         expression: `document.documentElement.getAttribute('dir')`
       });

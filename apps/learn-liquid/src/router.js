@@ -5,11 +5,13 @@ import Playground from './pages/Playground.liq';
 import Cheatsheet from './pages/Cheatsheet.liq';
 import Deployment from './pages/Deployment.liq';
 import Errors from './pages/Errors.liq';
+import Play from './pages/Play.liq';
 import NotFound from './pages/NotFound.liq';
 
 export const routes = [
   { path: '/', component: Home },
   { path: '/guide', component: Guide },
+  { path: '/play', component: Play },
   { path: '/playground', component: Playground },
   { path: '/cheatsheet', component: Cheatsheet },
   { path: '/errors', component: Errors },

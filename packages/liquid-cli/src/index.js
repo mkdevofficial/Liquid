@@ -62,6 +62,11 @@ export async function runCLI(argv = process.argv.slice(2)) {
       await guideCommand(options);
       break;
 
+    case 'play':
+    case 'arena':
+      await guideCommand({ ...options, play: true });
+      break;
+
     default:
       printBanner();
       console.error(`  \x1b[31mUnknown command: '${command}'\x1b[0m\n`);
@@ -87,6 +92,8 @@ function parseOptions(args) {
       options.host = arg.split('=')[1];
     } else if (arg === '--minimal') {
       options.minimal = true;
+    } else if (arg === '--play' || arg === '-P') {
+      options.play = true;
     } else if (arg === '--virtual') {
       options.virtual = true;
     } else if (arg.startsWith('--rows=')) {
@@ -118,12 +125,14 @@ function printHelp() {
     preview             Serve production build locally
     check               Validate all .liq files in project without building
     edit [file]         Open file in phone-friendly liquid-edit TUI (alias: lqe)
-    guide               Launch interactive documentation & error catalog server (default port: 4000)
+    guide               Launch interactive documentation & error catalog (use --play for gamified arena)
+    play                Launch gamified microlearning arena with XP & Seasons (alias: liquid guide --play)
 
   Options:
     -p, --port <number> Server port (default: 3000 for dev, 4000 for guide, 4173 for preview)
     -h, --host <string> Server host (default: 0.0.0.0)
     --minimal           Scaffold minimal template during create
+    --play              Launch directly into the interactive gamified arena with XP and Seasons
     --outDir <path>     Output directory for build (default: dist)
     --help              Display help information
     --version           Display CLI version

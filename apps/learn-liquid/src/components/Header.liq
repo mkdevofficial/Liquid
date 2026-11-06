@@ -209,11 +209,12 @@ header.nav-header
     div.brand @click=goTo('/')
       span.brand-icon 🫟
       span.brand-title Liquid
-      span.brand-badge v1.0.0
+      span.brand-badge v0.2.0
 
     nav.nav-links
       button.nav-link class={currentPath() === '/' ? 'active' : ''} @click=goTo('/') {t('navHome')}
       button.nav-link class={currentPath() === '/guide' ? 'active' : ''} @click=goTo('/guide') {t('navGuide')}
+      button.nav-link class={currentPath() === '/play' ? 'active' : ''} @click=goTo('/play') {t('navPlay')}
       button.nav-link class={currentPath() === '/playground' ? 'active' : ''} @click=goTo('/playground') {t('navPlayground')}
       button.nav-link class={currentPath() === '/cheatsheet' ? 'active' : ''} @click=goTo('/cheatsheet') {t('navCheatsheet')}
       button.nav-link class={currentPath() === '/errors' ? 'active' : ''} @click=goTo('/errors') {t('navErrors')}
@@ -232,6 +233,7 @@ header.nav-header
     div.mobile-drawer
       button.mobile-link class={currentPath() === '/' ? 'active' : ''} @click=goTo('/') {t('navHome')}
       button.mobile-link class={currentPath() === '/guide' ? 'active' : ''} @click=goTo('/guide') {t('navGuide')}
+      button.mobile-link class={currentPath() === '/play' ? 'active' : ''} @click=goTo('/play') {t('navPlay')}
       button.mobile-link class={currentPath() === '/playground' ? 'active' : ''} @click=goTo('/playground') {t('navPlayground')}
       button.mobile-link class={currentPath() === '/cheatsheet' ? 'active' : ''} @click=goTo('/cheatsheet') {t('navCheatsheet')}
       button.mobile-link class={currentPath() === '/errors' ? 'active' : ''} @click=goTo('/errors') {t('navErrors')}

@@ -148,3 +148,22 @@ test('CLI - guide command serves official guide on default port 4000', async () 
     await new Promise(r => server.close(r));
   }
 });
+
+test('CLI - guide command with --play flag redirects to /#/play gamified arena', async () => {
+  const testPort = 4002;
+  const server = await guideCommand({ port: testPort, host: '127.0.0.1', play: true });
+  assert.ok(server, 'guideCommand must return active server instance');
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${testPort}/`, { redirect: 'manual' });
+    assert.strictEqual(res.status, 302);
+    assert.strictEqual(res.headers.get('location'), '/#/play');
+
+    const appRes = await fetch(`http://127.0.0.1:${testPort}/index.html`);
+    assert.strictEqual(appRes.status, 200);
+    const html = await appRes.text();
+    assert.ok(html.includes('id="app"'));
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});

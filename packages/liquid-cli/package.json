@@ -1,6 +1,6 @@
 {
   "name": "@mkdevofficial/liquid-cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "🫟 CLI and development server for the Liquid frontend framework",
   "type": "module",
   "bin": {
@@ -21,10 +21,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@mkdevofficial/liquid-compiler": "^0.2.0",
-    "@mkdevofficial/liquid-runtime": "^0.2.0",
-    "@mkdevofficial/liquid-router": "^0.2.0",
-    "@mkdevofficial/liquid-edit": "^0.2.0"
+    "@mkdevofficial/liquid-compiler": "^0.3.0",
+    "@mkdevofficial/liquid-runtime": "^0.3.0",
+    "@mkdevofficial/liquid-router": "^0.3.0",
+    "@mkdevofficial/liquid-edit": "^0.3.0"
   },
   "license": "MIT"
 }
