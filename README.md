@@ -206,4 +206,4 @@ The framework is organized into decoupled, tree-shakeable packages:
 
 ## 📄 License
 
-MIT © Google DeepMind
+MIT © mkdevofficial
