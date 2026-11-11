@@ -1,19 +1,20 @@
 {
   "name": "@mkdevofficial/liquid",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "🫟 The ultra-concise frontend framework for the web",
   "type": "module",
   "main": "src/index.js",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./package.json": "./package.json"
   },
   "files": [
     "src"
   ],
   "dependencies": {
-    "@mkdevofficial/liquid-compiler": "^0.3.1",
-    "@mkdevofficial/liquid-runtime": "^0.3.1",
-    "@mkdevofficial/liquid-router": "^0.3.1"
+    "@mkdevofficial/liquid-compiler": "^0.3.2",
+    "@mkdevofficial/liquid-runtime": "^0.3.2",
+    "@mkdevofficial/liquid-router": "^0.3.2"
   },
   "publishConfig": {
     "access": "public"

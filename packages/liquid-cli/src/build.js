@@ -133,31 +133,7 @@ export async function buildCommand(options = {}) {
   };
 }
 
-function resolvePackageDir(pkgName, rootDir) {
-  const unscope = pkgName.replace(/^@[^/]+\//, '');
-  // Check rootDir and parent directories for node_modules/pkgName
-  let cur = rootDir;
-  while (cur) {
-    let candidate = path.join(cur, 'node_modules', pkgName);
-    if (fs.existsSync(candidate)) return candidate;
-    candidate = path.join(cur, 'node_modules', unscope);
-    if (fs.existsSync(candidate)) return candidate;
-    const parent = path.dirname(cur);
-    if (parent === cur) break;
-    cur = parent;
-  }
-  // Sibling in monorepo
-  const cliDir = path.dirname(new URL(import.meta.url).pathname);
-  const sibling = path.resolve(cliDir, '../../', unscope);
-  if (fs.existsSync(sibling)) return sibling;
 
-  // Fallback relative to liquid-cli package
-  const fallback = path.resolve(cliDir, '../../..', 'node_modules', pkgName);
-  if (fs.existsSync(fallback)) return fallback;
-  const fallbackUnscope = path.resolve(cliDir, '../../..', 'node_modules', unscope);
-  if (fs.existsSync(fallbackUnscope)) return fallbackUnscope;
-  return null;
-}
 
 export function buildProductionBundle({ entryPath, compiledModules, rootDir }) {
   const sourceFiles = [];

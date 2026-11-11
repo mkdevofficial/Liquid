@@ -1,30 +1,75 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 
-function resolvePackageDir(pkgName, rootDir) {
+export function resolvePackageDir(pkgName, rootDir) {
   const unscope = pkgName.replace(/^@[^/]+\//, '');
-  // Sibling in monorepo
-  const sibling = path.resolve(__dirname, '../../..', unscope);
-  if (fs.existsSync(sibling)) return sibling;
 
-  const pkgSibling = path.resolve(__dirname, '../..', unscope);
-  if (fs.existsSync(pkgSibling)) return pkgSibling;
+  // 1. Monorepo development: check sibling packages relative to liquid-cli
+  const monorepoSibling1 = path.resolve(__dirname, '../../..', unscope);
+  if (fs.existsSync(path.join(monorepoSibling1, 'package.json'))) return monorepoSibling1;
 
-  // Check rootDir and parents
-  let cur = rootDir;
-  while (cur) {
-    let candidate = path.join(cur, 'node_modules', pkgName);
-    if (fs.existsSync(candidate)) return candidate;
-    candidate = path.join(cur, 'node_modules', unscope);
-    if (fs.existsSync(candidate)) return candidate;
-    const parent = path.dirname(cur);
-    if (parent === cur) break;
-    cur = parent;
+  const monorepoSibling2 = path.resolve(__dirname, '../..', unscope);
+  if (fs.existsSync(path.join(monorepoSibling2, 'package.json'))) return monorepoSibling2;
+
+  // 2. Check local project's own node_modules (only in rootDir, avoid stale parent traversal)
+  if (rootDir) {
+    const localCandidates = [
+      path.join(rootDir, 'node_modules', pkgName),
+      path.join(rootDir, 'node_modules', `@mkdevofficial/${unscope}`),
+      path.join(rootDir, 'node_modules', unscope)
+    ];
+    for (const cand of localCandidates) {
+      if (fs.existsSync(path.join(cand, 'package.json'))) {
+        if (!pkgName.includes('runtime') || fs.existsSync(path.join(cand, 'src/renderer.js'))) {
+          return cand;
+        }
+      }
+    }
   }
+
+  // 3. Resolve from liquid-cli's own dependencies via Node resolver
+  try {
+    const entry = require.resolve(pkgName);
+    let dir = path.dirname(entry);
+    while (dir && dir !== path.dirname(dir)) {
+      if (fs.existsSync(path.join(dir, 'package.json'))) {
+        return dir;
+      }
+      dir = path.dirname(dir);
+    }
+  } catch {}
+
+  // 4. Check CLI's own node_modules directory
+  const cliNodeModules = [
+    path.resolve(__dirname, '../node_modules', pkgName),
+    path.resolve(__dirname, '../node_modules/@mkdevofficial', unscope),
+    path.resolve(__dirname, '../node_modules', unscope)
+  ];
+  for (const cand of cliNodeModules) {
+    if (fs.existsSync(path.join(cand, 'package.json'))) return cand;
+  }
+
+  // 5. Fallback relative to CLI directory
+  const globalCandidates = [
+    path.resolve(__dirname, '../../', unscope),
+    path.resolve(__dirname, '../..', pkgName),
+    path.resolve(__dirname, '../../..', 'node_modules', pkgName),
+    path.resolve(__dirname, '../../..', 'node_modules/@mkdevofficial', unscope)
+  ];
+  for (const cand of globalCandidates) {
+    if (fs.existsSync(path.join(cand, 'package.json'))) {
+      if (!pkgName.includes('runtime') || fs.existsSync(path.join(cand, 'src/renderer.js'))) {
+        return cand;
+      }
+    }
+  }
+
   return null;
 }
 

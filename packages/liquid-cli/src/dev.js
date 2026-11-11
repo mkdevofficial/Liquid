@@ -10,6 +10,7 @@ import { printServerUrls, getNetworkUrls } from './network.js';
 import { renderQRAscii } from './qr.js';
 import { createAndroidBundle, loadProjectConfig } from './android.js';
 import { resolveRuntimeError } from './sourcemap-resolver.js';
+import { resolvePackageDir } from './runtime-bundle.js';
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -1025,37 +1026,7 @@ function serveJavaScript(filePath, res) {
   res.end(content);
 }
 
-function resolvePackageDir(pkgName, rootDir) {
-  const unscope = pkgName.replace(/^@[^/]+\//, '');
 
-  // Monorepo support: check sibling packages relative to liquid-cli first
-  const cliDir = path.dirname(new URL(import.meta.url).pathname);
-  const siblingPkg = path.resolve(cliDir, '../../', unscope);
-  if (fs.existsSync(siblingPkg)) return siblingPkg;
-
-  let cur = rootDir;
-  while (cur) {
-    let candidate = path.join(cur, 'node_modules', `@mkdevofficial/${unscope}`);
-    if (fs.existsSync(candidate)) return candidate;
-    candidate = path.join(cur, 'node_modules', pkgName);
-    if (fs.existsSync(candidate)) return candidate;
-    candidate = path.join(cur, 'node_modules', unscope);
-    if (fs.existsSync(candidate)) return candidate;
-    const parent = path.dirname(cur);
-    if (parent === cur) break;
-    cur = parent;
-  }
-
-  // Fallback relative to cli node_modules
-  const fallbackScoped = path.resolve(cliDir, '../../..', 'node_modules', `@mkdevofficial/${unscope}`);
-  if (fs.existsSync(fallbackScoped)) return fallbackScoped;
-  const fallback = path.resolve(cliDir, '../../..', 'node_modules', pkgName);
-  if (fs.existsSync(fallback)) return fallback;
-  const fallbackUnscoped = path.resolve(cliDir, '../../..', 'node_modules', unscope);
-  if (fs.existsSync(fallbackUnscoped)) return fallbackUnscoped;
-
-  return null;
-}
 
 function handleModuleRequest(pkgRequest, res, rootDir) {
   try {
