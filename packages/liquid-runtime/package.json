@@ -1,6 +1,6 @@
 {
   "name": "@mkdevofficial/liquid-runtime",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "🫟 Fine-grained reactive runtime for Liquid",
   "type": "module",
   "main": "src/index.js",

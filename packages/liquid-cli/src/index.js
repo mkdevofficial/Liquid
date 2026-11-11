@@ -1,23 +1,45 @@
-import { createCommand } from './create.js';
-import { devCommand } from './dev.js';
-import { buildCommand } from './build.js';
-import { previewCommand } from './preview.js';
-import { checkCommand } from './check.js';
-import { editCommand } from './edit.js';
-import { guideCommand } from './guide.js';
-import { buildAndroidCommand, runAndroidCommand } from './android.js';
-import { examplesCommand } from './examples.js';
 import { printBanner } from './banner.js';
 
-export { createCommand } from './create.js';
-export { devCommand } from './dev.js';
-export { buildCommand } from './build.js';
-export { previewCommand } from './preview.js';
-export { checkCommand } from './check.js';
-export { editCommand } from './edit.js';
-export { guideCommand } from './guide.js';
-export { buildAndroidCommand, runAndroidCommand } from './android.js';
-export { examplesCommand } from './examples.js';
+export async function createCommand(...args) {
+  const mod = await import('./create.js');
+  return mod.createCommand(...args);
+}
+export async function devCommand(...args) {
+  const mod = await import('./dev.js');
+  return mod.devCommand(...args);
+}
+export async function buildCommand(...args) {
+  const mod = await import('./build.js');
+  return mod.buildCommand(...args);
+}
+export async function previewCommand(...args) {
+  const mod = await import('./preview.js');
+  return mod.previewCommand(...args);
+}
+export async function checkCommand(...args) {
+  const mod = await import('./check.js');
+  return mod.checkCommand(...args);
+}
+export async function editCommand(...args) {
+  const mod = await import('./edit.js');
+  return mod.editCommand(...args);
+}
+export async function guideCommand(...args) {
+  const mod = await import('./guide.js');
+  return mod.guideCommand(...args);
+}
+export async function buildAndroidCommand(...args) {
+  const mod = await import('./android.js');
+  return mod.buildAndroidCommand(...args);
+}
+export async function runAndroidCommand(...args) {
+  const mod = await import('./android.js');
+  return mod.runAndroidCommand(...args);
+}
+export async function examplesCommand(...args) {
+  const mod = await import('./examples.js');
+  return mod.examplesCommand(...args);
+}
 
 export async function runCLI(argv = process.argv.slice(2)) {
   const args = [...argv];
