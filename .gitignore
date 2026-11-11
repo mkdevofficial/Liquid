@@ -2,5 +2,11 @@ node_modules/
 dist/
 apps/*/dist/
 tmp*/
+.liquid/
+.gradle/
+build/
+*.apk
+*.qbc
+local.properties
 .DS_Store
 *.log

@@ -1,0 +1,9 @@
+{
+  "id": "07-events-handlers",
+  "title": "Events & Modifiers",
+  "category": "Forms & Flow",
+  "description": "Event dispatching, event modifiers like .enter and .prevent, and custom synthetic payloads.",
+  "keywords": ["events", "click", "keydown", "modifiers", "enter"],
+  "platforms": ["web", "android"],
+  "difficulty": "intermediate"
+}

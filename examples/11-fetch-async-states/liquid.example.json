@@ -1,0 +1,9 @@
+{
+  "id": "11-fetch-async-states",
+  "title": "Async Data & Fetch States",
+  "category": "Advanced & Async",
+  "description": "Managing asynchronous requests with loading spinners, data display, error banners, and manual retries.",
+  "keywords": ["fetch", "async", "loading", "error", "retry"],
+  "platforms": ["web", "android"],
+  "difficulty": "intermediate"
+}

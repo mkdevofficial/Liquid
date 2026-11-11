@@ -34,6 +34,39 @@ export function analyze(ast, options = {}) {
     }
   }
 
+  // Scan local variable / function declarations in logic section
+  const declaredLocals = new Set();
+
+  // 1. Destructured declarations: const { a, b: c, d = 1 } = ...
+  const destructureRegex = /(?:const|let|var)\s*\{([^}]+)\}/g;
+  while ((match = destructureRegex.exec(logicContent)) !== null) {
+    const items = match[1].split(',').map(s => s.trim()).filter(Boolean);
+    for (const item of items) {
+      const name = item.split('=')[0].trim();
+      const finalName = name.includes(':') ? name.split(':')[1].trim() : name;
+      const clean = finalName.replace(/[^a-zA-Z0-9_$]/g, '');
+      if (clean) declaredLocals.add(clean);
+    }
+  }
+
+  // 2. Standard variable declarations: const X = ..., let Y, etc.
+  const varRegex = /(?:const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g;
+  while ((match = varRegex.exec(logicContent)) !== null) {
+    declaredLocals.add(match[1]);
+  }
+
+  // 3. Function declarations: function X(...)
+  const fnRegex = /function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g;
+  while ((match = fnRegex.exec(logicContent)) !== null) {
+    declaredLocals.add(match[1]);
+  }
+
+  // 4. Class declarations: class X
+  const classRegex = /class\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g;
+  while ((match = classRegex.exec(logicContent)) !== null) {
+    declaredLocals.add(match[1]);
+  }
+
   // Traverse template
   function visit(node) {
     if (!node) return;
@@ -71,10 +104,10 @@ export function analyze(ast, options = {}) {
     visit(node);
   }
 
-  // Components that are referenced but not explicitly imported
+  // Components that are referenced but not explicitly imported or declared locally
   const autoImportComponents = [];
   for (const comp of referencedComponents) {
-    if (!explicitImports.has(comp)) {
+    if (!explicitImports.has(comp) && !declaredLocals.has(comp)) {
       autoImportComponents.push(comp);
     }
   }

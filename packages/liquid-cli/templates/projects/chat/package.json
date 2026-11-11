@@ -1,0 +1,16 @@
+{
+  "name": "{{PACKAGE_NAME}}",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "liquid dev",
+    "build": "liquid build",
+    "build:android": "liquid build android",
+    "preview": "liquid preview",
+    "check": "liquid check",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "@mkdevofficial/liquid": "^0.2.0"
+  }
+}

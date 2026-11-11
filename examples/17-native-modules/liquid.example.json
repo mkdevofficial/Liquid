@@ -1,0 +1,9 @@
+{
+  "id": "17-native-modules",
+  "title": "Native Modules & Platform APIs",
+  "category": "Cross-Platform & Edge Cases",
+  "description": "Calling native Android platform modules through the Liquid bridge with graceful web fallbacks.",
+  "keywords": ["native", "bridge", "haptics", "device-info", "modules"],
+  "platforms": ["web", "android"],
+  "difficulty": "advanced"
+}

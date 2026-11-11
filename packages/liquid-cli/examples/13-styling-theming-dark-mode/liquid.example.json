@@ -1,0 +1,9 @@
+{
+  "id": "13-styling-theming-dark-mode",
+  "title": "Styling, Theming & Dark Mode",
+  "category": "Advanced & Async",
+  "description": "Design tokens, dynamic theme switching (light/dark), and high-contrast styling.",
+  "keywords": ["theming", "dark-mode", "tokens", "styling", "contrast"],
+  "platforms": ["web", "android"],
+  "difficulty": "intermediate"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "08-props-slots-composition",
+  "title": "Props, Slots & Composition",
+  "category": "Forms & Flow",
+  "description": "Compound components, slot projection, fallback slot content, and flexible layout composition.",
+  "keywords": ["props", "slots", "composition", "fallback"],
+  "platforms": ["web", "android"],
+  "difficulty": "intermediate"
+}

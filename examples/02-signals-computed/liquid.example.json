@@ -1,0 +1,9 @@
+{
+  "id": "02-signals-computed",
+  "title": "Signals & Computed",
+  "category": "Foundations",
+  "description": "Fine-grained reactivity using signals, computed derived values, and batched updates.",
+  "keywords": ["signals", "computed", "reactivity", "batch"],
+  "platforms": ["web", "android"],
+  "difficulty": "beginner"
+}

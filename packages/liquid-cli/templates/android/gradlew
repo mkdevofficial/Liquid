@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -e
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export JAVA_HOME="${JAVA_HOME:-/home/kali/jdk17}"
+export ANDROID_HOME="${ANDROID_HOME:-/home/kali/android-sdk}"
+
+if [ -x "$HOME/.gradle/wrapper/dists/gradle-8.9-bin/90cnw93cvbtalezasaz0blq0a/gradle-8.9/bin/gradle" ]; then
+    GRADLE_BIN="$HOME/.gradle/wrapper/dists/gradle-8.9-bin/90cnw93cvbtalezasaz0blq0a/gradle-8.9/bin/gradle"
+elif command -v gradle >/dev/null 2>&1; then
+    GRADLE_BIN="gradle"
+else
+    GRADLE_BIN="$(find "$HOME/.gradle/wrapper/dists" -name "gradle" -type f -perm -111 2>/dev/null | grep -E "8\.[789]|9\." | head -n 1)"
+fi
+
+if [ -z "$GRADLE_BIN" ] || [ ! -x "$GRADLE_BIN" ]; then
+    echo "Error: Gradle 8.9 binary could not be found." >&2
+    exit 1
+fi
+
+exec "$GRADLE_BIN" --project-dir "$DIR" "$@"

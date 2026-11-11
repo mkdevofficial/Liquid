@@ -4,6 +4,8 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { compile } from '@mkdevofficial/liquid-compiler';
 import { printBanner } from './banner.js';
+import { getUnifiedRuntimeBundle, processUserImports } from './runtime-bundle.js';
+import { checkBundleLinking } from './link-check.js';
 
 /**
  * Production build: pure JS packaging, minification, asset hashing, scoped CSS extraction.
@@ -157,34 +159,20 @@ function resolvePackageDir(pkgName, rootDir) {
   return null;
 }
 
-function buildProductionBundle({ entryPath, compiledModules, rootDir }) {
-  const runtimeDir = resolvePackageDir('@mkdevofficial/liquid-runtime', rootDir) || resolvePackageDir('liquid-runtime', rootDir);
-  const routerDir = resolvePackageDir('@mkdevofficial/liquid-router', rootDir) || resolvePackageDir('liquid-router', rootDir);
-
-  const signalsCode = fs.readFileSync(path.join(runtimeDir, 'src/signals.js'), 'utf8');
-  const domCode = fs.readFileSync(path.join(runtimeDir, 'src/dom.js'), 'utf8');
-  const builtinsCode = fs.readFileSync(path.join(runtimeDir, 'src/builtins.js'), 'utf8');
-  const routerCode = routerDir && fs.existsSync(path.join(routerDir, 'src/index.js'))
-    ? fs.readFileSync(path.join(routerDir, 'src/index.js'), 'utf8')
-    : '';
-
-  // Strip exports from runtime and place in bundle
-  let combinedRuntime = [
-    signalsCode.replace(/export\s+/g, ''),
-    domCode.replace(/import\s+[^;]+;/g, '').replace(/export\s+/g, ''),
-    builtinsCode.replace(/import\s+[^;]+;/g, '').replace(/export\s+/g, ''),
-    routerCode.replace(/import\s+[^;]+;/g, '').replace(/export\s+/g, '')
-  ].join('\n');
+export function buildProductionBundle({ entryPath, compiledModules, rootDir }) {
+  const sourceFiles = [];
 
   // Component definitions
   const componentBlocks = [];
   for (const [relPath, code] of compiledModules.entries()) {
     const compName = getComponentNameFromFile(relPath);
+    sourceFiles.push({ path: relPath, content: code });
     // Replace imports and exports in component code
-    let cleaned = code
-      .replace(/import\s+[^;]+;/g, '')
-      .replace(/export\s+default\s+function\s+([a-zA-Z0-9_$]+)/, `function ${compName}`)
-      .replace(/export\s+default\s+function/, `function ${compName}`);
+    let cleaned = processUserImports(code)
+      .replace(/^\s*function\s+([a-zA-Z0-9_$]+)\s*\(/gm, (m, name) => {
+        if (name === 'App' || name === compName) return `function ${compName}(`;
+        return m;
+      });
     componentBlocks.push(cleaned);
   }
 
@@ -194,21 +182,25 @@ function buildProductionBundle({ entryPath, compiledModules, rootDir }) {
   for (const f of srcJsFiles) {
     const rel = path.relative(rootDir, f);
     if (normalizePath(rel) !== 'src/main.js') {
-      const helperCode = fs.readFileSync(f, 'utf8')
-        .replace(/import\s+[^;]+;/g, '')
-        .replace(/export\s+const\s+/g, 'const ')
-        .replace(/export\s+let\s+/g, 'let ')
-        .replace(/export\s+function\s+/g, 'function ')
-        .replace(/export\s+default\s+/g, '');
-      helperBlocks.push(helperCode);
+      const helperCode = fs.readFileSync(f, 'utf8');
+      sourceFiles.push({ path: rel, content: helperCode });
+      helperBlocks.push(processUserImports(helperCode));
     }
   }
 
   // Read entry code
-  let entryCode = fs.readFileSync(entryPath, 'utf8')
-    .replace(/import\s+[^;]+;/g, '');
+  let entryCode = fs.readFileSync(entryPath, 'utf8');
+  sourceFiles.push({ path: 'src/main.js', content: entryCode });
+  const cleanedEntry = processUserImports(entryCode);
 
-  return `
+  // Check if user code already declares compile
+  const allUserCode = [cleanedEntry, ...helperBlocks, ...componentBlocks].join('\n');
+  const hasUserCompile = /(?:^|\n)\s*function\s+compile\b/.test(allUserCode);
+
+  // Unified Runtime
+  const combinedRuntime = getUnifiedRuntimeBundle(rootDir, { target: 'web', excludeCompilerStub: hasUserCompile });
+
+  const bundleCode = `
 // Liquid Production Runtime
 ${combinedRuntime}
 
@@ -219,8 +211,17 @@ ${helperBlocks.join('\n\n')}
 ${componentBlocks.join('\n\n')}
 
 // Application Entry
-${entryCode}
+${cleanedEntry}
 `;
+
+  // Build-time link check
+  checkBundleLinking(bundleCode, {
+    sourceFiles,
+    target: 'web',
+    throwOnError: true
+  });
+
+  return bundleCode;
 }
 
 function getComponentNameFromFile(filePath) {

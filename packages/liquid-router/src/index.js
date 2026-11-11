@@ -1,4 +1,4 @@
-import { signal, computed, effect, untrack, element, text, onDestroy } from '@mkdevofficial/liquid-runtime';
+import { signal, computed, effect, untrack, element, text, comment, insert, remove, onDestroy } from '@mkdevofficial/liquid-runtime';
 
 /**
  * Match a route path pattern against a URL path.
@@ -150,7 +150,9 @@ export function createRouter({ routes = [], mode = 'hash' }) {
    * RouterView component: dynamically renders the component for the active route.
    */
   function RouterView(props = {}) {
-    const anchor = document.createComment('router-view');
+    const anchor = typeof document !== 'undefined' && typeof document.createComment === 'function'
+      ? document.createComment('router-view')
+      : comment('router-view');
     let currentRenderedNodes = [];
 
     // Initial synchronous render of active component
@@ -171,7 +173,8 @@ export function createRouter({ routes = [], mode = 'hash' }) {
       }
 
       for (const n of currentRenderedNodes) {
-        if (n.parentNode) n.parentNode.removeChild(n);
+        if (n && n.parentNode) n.parentNode.removeChild(n);
+        else if (n && typeof remove === 'function') remove(n);
       }
       currentRenderedNodes = [];
 
@@ -183,7 +186,10 @@ export function createRouter({ routes = [], mode = 'hash' }) {
         const parent = anchor.parentNode;
         if (parent) {
           for (const n of nodes) {
-            if (n) parent.insertBefore(n, anchor);
+            if (n) {
+              if (parent.insertBefore) parent.insertBefore(n, anchor);
+              else if (typeof insert === 'function') insert(parent, n, anchor);
+            }
           }
         }
       }
@@ -214,7 +220,7 @@ export function createRouter({ routes = [], mode = 'hash' }) {
     return a;
   }
 
-  return {
+  const routerInstance = {
     mode,
     currentUrl,
     currentRoute,
@@ -228,6 +234,12 @@ export function createRouter({ routes = [], mode = 'hash' }) {
     RouterView,
     Link
   };
+
+  if (typeof globalThis !== 'undefined') {
+    globalThis.__liquid_router = routerInstance;
+  }
+
+  return routerInstance;
 }
 
 function getCurrentLocation(mode) {

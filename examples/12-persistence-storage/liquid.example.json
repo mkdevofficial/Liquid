@@ -1,0 +1,9 @@
+{
+  "id": "12-persistence-storage",
+  "title": "Cross-Platform Persistence",
+  "category": "Advanced & Async",
+  "description": "Cross-platform data persistence using localStorage on web with in-memory/file fallback on Android.",
+  "keywords": ["storage", "persistence", "localStorage", "offline"],
+  "platforms": ["web", "android"],
+  "difficulty": "intermediate"
+}

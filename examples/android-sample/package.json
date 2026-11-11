@@ -1,0 +1,16 @@
+{
+  "name": "liquid-android-sample",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "liquid dev",
+    "build": "liquid build",
+    "build:android": "liquid build android",
+    "build:android:release": "liquid build android --release",
+    "run:android": "liquid run android"
+  },
+  "dependencies": {
+    "liquid": "^1.0.0"
+  }
+}

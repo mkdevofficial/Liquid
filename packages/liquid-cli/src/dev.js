@@ -1,9 +1,15 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { compile, LiquidSyntaxError } from '@mkdevofficial/liquid-compiler';
+import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { WebSocketServer } from 'ws';
+import { compile, LiquidSyntaxError, formatExcerpt } from '@mkdevofficial/liquid-compiler';
 import { printBanner } from './banner.js';
-import { printServerUrls } from './network.js';
+import { printServerUrls, getNetworkUrls } from './network.js';
+import { renderQRAscii } from './qr.js';
+import { createAndroidBundle, loadProjectConfig } from './android.js';
+import { resolveRuntimeError } from './sourcemap-resolver.js';
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -24,14 +30,101 @@ const NO_CACHE_HEADERS = {
   'Expires': '0'
 };
 
+function verifyToken(req, expectedToken) {
+  if (!expectedToken) return true;
+  try {
+    const parsedUrl = new URL(req.url, 'http://localhost');
+    const tokenQuery = parsedUrl.searchParams.get('token');
+    if (tokenQuery && tokenQuery === expectedToken) return true;
+
+    const authHeader = req.headers['authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      if (authHeader.slice(7).trim() === expectedToken) return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
+function tryAutoOpenDeepLink(deepLink) {
+  const amCandidates = ['/system/bin/am', 'am'];
+  for (const cmd of amCandidates) {
+    try {
+      const res = spawnSync(cmd, ['start', '-a', 'android.intent.action.VIEW', '-d', deepLink], { stdio: 'ignore' });
+      if (res && res.status === 0) return true;
+    } catch (_) {}
+  }
+  try {
+    const res = spawnSync('termux-open-url', [deepLink], { stdio: 'ignore' });
+    if (res && res.status === 0) return true;
+  } catch (_) {}
+  return false;
+}
+
+function bindWithFallback(srv, startPort, hostToBind, maxAttempts = 10) {
+  return new Promise((resolve, reject) => {
+    let curPort = startPort;
+    let attempts = 0;
+
+    function tryBind() {
+      const onError = (err) => {
+        srv.removeListener('error', onError);
+        if (err.code === 'EADDRINUSE' && attempts < maxAttempts) {
+          attempts++;
+          curPort++;
+          tryBind();
+        } else {
+          reject(err);
+        }
+      };
+      srv.once('error', onError);
+      srv.listen(curPort, hostToBind, () => {
+        srv.removeListener('error', onError);
+        resolve(curPort);
+      });
+    }
+
+    tryBind();
+  });
+}
+
+export function installLiquidDevApp() {
+  const candidates = [
+    path.resolve(process.cwd(), 'packages/liquid-cli/templates/android/liquid-dev-app/build/outputs/apk/release/liquid-dev-release.apk'),
+    '/sdcard/Download/liquid-dev.apk',
+    '/sdcard/liquid-dev.apk'
+  ];
+  let srcApk = null;
+  for (const c of candidates) {
+    if (fs.existsSync(c)) { srcApk = c; break; }
+  }
+  if (!srcApk) {
+    console.error('  \x1b[31mError: liquid-dev.apk not found. Please build it first with scripts/build-liquid-dev.sh\x1b[0m\n');
+    return;
+  }
+  try {
+    fs.mkdirSync('/sdcard/Download', { recursive: true });
+    fs.copyFileSync(srcApk, '/sdcard/Download/liquid-dev.apk');
+    fs.copyFileSync(srcApk, '/sdcard/liquid-dev.apk');
+    console.log(`  \x1b[32m✔ Copied Liquid dev APK to /sdcard/Download/liquid-dev.apk\x1b[0m`);
+    console.log(`  \x1b[36mInstall it on your phone or run: termux-open /sdcard/Download/liquid-dev.apk\x1b[0m\n`);
+  } catch (e) {
+    console.error(`  \x1b[31mFailed to copy APK: ${e.message}\x1b[0m\n`);
+  }
+}
+
 /**
  * Start the Liquid development server with fast compilation, hot reload,
- * real-time request logging, and phone-friendly in-browser runtime error overlay.
+ * WebSocket communication with the on-device Liquid Dev app, and in-browser error overlay.
  */
 export async function devCommand(options = {}) {
+  if (options.install) {
+    installLiquidDevApp();
+    return null;
+  }
+
   printBanner('dev');
 
-  const rootDir = process.cwd();
+  const rootDir = options.root ? path.resolve(options.root) : process.cwd();
 
   // Load config if available
   let config = {};
@@ -45,24 +138,216 @@ export async function devCommand(options = {}) {
     }
   }
 
-  const port = options.port || config.port || 3000;
-  const host = options.host || config.host || '0.0.0.0';
+  const requestedPort = parseInt(options.port || config.port || 3000, 10);
+  const isLan = options.host === 'lan' || options.host === '0.0.0.0';
+  const bindHost = isLan ? '0.0.0.0' : (options.host || '127.0.0.1');
 
+  if (isLan) {
+    console.log('  \x1b[33m⚠ Warning: --host lan binds to 0.0.0.0. Any device on your local network can connect.\x1b[0m\n');
+  }
+
+  const pairingToken = options.token || crypto.randomBytes(4).toString('hex');
+  const projectConfig = loadProjectConfig(rootDir);
+
+  let currentBuildId = crypto.randomBytes(4).toString('hex');
+  let currentCompiledBundle = '';
+  let currentCompileError = null;
   const sseClients = new Set();
+
+  // WebSocket Server on /ws
+  const wss = new WebSocketServer({ noServer: true });
+
+  function triggerRecompile() {
+    try {
+      currentCompiledBundle = createAndroidBundle(rootDir, projectConfig, {
+        id: currentBuildId,
+        time: new Date().toISOString(),
+        mode: 'dev',
+        inspect: true
+      });
+      currentCompileError = null;
+      currentBuildId = crypto.randomBytes(4).toString('hex');
+
+      // 1. Broadcast clear-error and reload to Liquid Dev WS clients
+      if (wss && wss.clients) {
+        for (const client of wss.clients) {
+          if (client.readyState === 1) {
+            try {
+              client.send(JSON.stringify({ type: 'clear-error', protocolVersion: 1 }));
+              client.send(JSON.stringify({
+                type: 'reload',
+                protocolVersion: 1,
+                buildId: currentBuildId,
+                timestamp: Date.now()
+              }));
+            } catch (_) {}
+          }
+        }
+      }
+
+      // 2. Broadcast reload to Web SSE clients
+      for (const client of sseClients) {
+        try {
+          client.write(`data: ${JSON.stringify({ type: 'reload', timestamp: Date.now() })}\n\n`);
+        } catch (_) {
+          sseClients.delete(client);
+        }
+      }
+    } catch (err) {
+      let frame = err.frame || '';
+      if (!frame && err.source && err.line) {
+        frame = formatExcerpt(err.source, err.line, err.column || 1);
+      } else if (!frame && err.stack) {
+        frame = err.stack;
+      }
+      currentCompileError = {
+        file: err.file || 'unknown',
+        line: err.line || 1,
+        column: err.column || 1,
+        message: err.message,
+        frame
+      };
+
+      console.error(`\n  \x1b[31m[Compile Error]\x1b[0m \x1b[1m${currentCompileError.file}:${currentCompileError.line}:${currentCompileError.column}\x1b[0m`);
+      console.error(`  ${currentCompileError.message}`);
+      if (currentCompileError.frame) {
+        console.error(`\n${currentCompileError.frame}\n`);
+      }
+
+      if (wss && wss.clients) {
+        for (const client of wss.clients) {
+          if (client.readyState === 1) {
+            try {
+              client.send(JSON.stringify({
+                type: 'compile-error',
+                protocolVersion: 1,
+                error: currentCompileError
+              }));
+            } catch (_) {}
+          }
+        }
+      }
+    }
+  }
+
+  // Initial compilation
+  triggerRecompile();
 
   // Watch files for changes
   const watcher = setupWatcher(rootDir, () => {
-    for (const client of sseClients) {
-      try {
-        client.write(`data: ${JSON.stringify({ type: 'reload', timestamp: Date.now() })}\n\n`);
-      } catch (e) {
-        sseClients.delete(client);
+    triggerRecompile();
+  });
+
+  const devContext = {
+    rootDir,
+    sseClients,
+    pairingToken,
+    projectConfig,
+    get currentBuildId() { return currentBuildId; },
+    get currentCompiledBundle() { return currentCompiledBundle; },
+    get currentCompileError() { return currentCompileError; },
+    triggerRecompile
+  };
+
+  const server = http.createServer((req, res) => {
+    handleRequest(req, res, devContext);
+  });
+
+  server.on('upgrade', (req, socket, head) => {
+    const parsedUrl = new URL(req.url, 'http://localhost');
+    if (parsedUrl.pathname === '/ws') {
+      const token = parsedUrl.searchParams.get('token');
+      if (token !== pairingToken) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+        socket.destroy();
+        return;
       }
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req);
+      });
+    } else {
+      socket.destroy();
     }
   });
 
-  const server = http.createServer((req, res) => {
-    handleRequest(req, res, { rootDir, sseClients });
+  wss.on('connection', (ws) => {
+    let clientInfo = { model: 'Android' };
+
+    ws.on('message', (raw) => {
+      try {
+        const msg = JSON.parse(raw);
+        if (msg.protocolVersion && msg.protocolVersion !== 1 && msg.type === 'hello') {
+          ws.send(JSON.stringify({
+            type: 'error',
+            protocolVersion: 1,
+            message: `Incompatible protocol version. Server: 1, Client: ${msg.protocolVersion}`
+          }));
+          ws.close(4002, 'Protocol version mismatch');
+          return;
+        }
+
+        switch (msg.type) {
+          case 'hello':
+            clientInfo = msg.device || {};
+            console.log(`  \x1b[32m✔ Connected device:\x1b[0m \x1b[1m${clientInfo.model || 'Android'}\x1b[0m (Android ${clientInfo.androidVersion || 'N/A'}, runtime v${clientInfo.runtimeVersion || '1.0'})\n`);
+            ws.send(JSON.stringify({
+              type: 'hello-ack',
+              protocolVersion: 1,
+              status: 'ok',
+              serverVersion: '1.0.0',
+              buildId: currentBuildId
+            }));
+            if (currentCompileError) {
+              ws.send(JSON.stringify({
+                type: 'compile-error',
+                protocolVersion: 1,
+                error: currentCompileError
+              }));
+            }
+            break;
+
+          case 'log': {
+            const lvl = msg.level || 'log';
+            const color = lvl === 'error' ? '\x1b[31m' : lvl === 'warn' ? '\x1b[33m' : '\x1b[36m';
+            const args = Array.isArray(msg.args)
+              ? msg.args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')
+              : String(msg.args || '');
+            console.log(`  \x1b[90m[${new Date().toLocaleTimeString()}]\x1b[0m ${color}[${clientInfo.model || 'Device'}:${lvl}]\x1b[0m ${args}`);
+            break;
+          }
+
+          case 'error':
+          case 'runtime-error': {
+            const mapped = resolveRuntimeError({
+              message: msg.message,
+              stack: msg.stack || msg.mappedStack,
+              bundleCode: currentCompiledBundle,
+              rootDir
+            });
+            console.error(`\n  \x1b[31m[Runtime Exception: ${clientInfo.model || 'Device'}]\x1b[0m \x1b[1m${mapped.file}:${mapped.line}:${mapped.column}\x1b[0m`);
+            console.error(`  ${mapped.message}`);
+            if (mapped.frame) {
+              console.error(`\n${mapped.frame}\n`);
+            }
+            ws.send(JSON.stringify({
+              type: 'compile-error',
+              protocolVersion: 1,
+              error: mapped
+            }));
+            break;
+          }
+
+          case 'ack':
+            break;
+
+          case 'request-reload':
+            triggerRecompile();
+            break;
+        }
+      } catch (e) {
+        console.error('  \x1b[31mError handling WS message:\x1b[0m', e.message);
+      }
+    });
   });
 
   server.on('close', () => {
@@ -73,12 +358,42 @@ export async function devCommand(options = {}) {
       try { client.end(); } catch (e) {}
     }
     sseClients.clear();
+    if (wss && wss.clients) {
+      for (const ws of wss.clients) {
+        try { ws.close(); } catch (e) {}
+      }
+    }
+    try { wss.close(); } catch (e) {}
   });
 
-  server.listen(port, host, () => {
-    printServerUrls({ port, host });
-    console.log('  \x1b[90mPress Ctrl+C to stop the server\x1b[0m\n');
-  });
+  const activePort = await bindWithFallback(server, requestedPort, bindHost);
+  const displayHost = (bindHost === '0.0.0.0' || bindHost === '::') ? '127.0.0.1' : bindHost;
+  const localUrl = `http://${displayHost}:${activePort}`;
+  const deepLink = `liquid://dev?url=${encodeURIComponent(localUrl)}&token=${pairingToken}`;
+
+  console.log(`  \x1b[1;36mLiquid dev server active\x1b[0m \x1b[90mv1.0.0\x1b[0m`);
+  console.log(`  \x1b[1mServer URL:\x1b[0m     \x1b[36m${localUrl}/\x1b[0m`);
+  console.log(`  \x1b[1mPairing Token:\x1b[0m  \x1b[33m${pairingToken}\x1b[0m`);
+  console.log(`  \x1b[1mDeep Link:\x1b[0m      \x1b[35m${deepLink}\x1b[0m\n`);
+
+  console.log('  \x1b[1mScan with phone camera or Liquid Dev app:\x1b[0m\n');
+  try {
+    const qrAscii = renderQRAscii(deepLink);
+    console.log(qrAscii + '\n');
+  } catch (_) {}
+
+  const opened = tryAutoOpenDeepLink(deepLink);
+  if (opened) {
+    console.log(`  \x1b[32m✔ Launched Liquid dev app automatically on device\x1b[0m\n`);
+  } else {
+    console.log(`  \x1b[90mConnect manually in Liquid dev app using URL above or deep link.\x1b[0m\n`);
+  }
+
+  server.devState = devContext;
+  server.pairingToken = pairingToken;
+  server.activePort = activePort;
+  server.deepLink = deepLink;
+  server.wss = wss;
 
   return server;
 }
@@ -94,7 +409,8 @@ function logRequest(req, res, pathname, startTime) {
   console.log(`  \x1b[90m${now}\x1b[0m \x1b[1m${req.method}\x1b[0m ${pathname} ${statusColor}${status}\x1b[0m \x1b[90m${duration}ms\x1b[0m`);
 }
 
-function handleRequest(req, res, { rootDir, sseClients }) {
+function handleRequest(req, res, devContext) {
+  const { rootDir, sseClients, pairingToken, projectConfig } = devContext;
   const startTime = performance.now();
   const parsedUrl = new URL(req.url, 'http://localhost');
   let pathname = decodeURIComponent(parsedUrl.pathname);
@@ -106,7 +422,181 @@ function handleRequest(req, res, { rootDir, sseClients }) {
     }
   });
 
-  // 1. SSE HMR endpoint
+  // Path traversal check on raw request URL
+  const rawUrl = req.url || '';
+  if (rawUrl.includes('..') || rawUrl.includes('%2e') || rawUrl.includes('%2E') || rawUrl.includes('\0')) {
+    res.writeHead(403, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.end('403 Forbidden: Path traversal detected');
+    return;
+  }
+
+  // 1. CORS Preflight
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept',
+      'Access-Control-Max-Age': '86400'
+    });
+    res.end();
+    return;
+  }
+
+  // 2. Liquid Dev: GET /status
+  if (pathname === '/status') {
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Access-Control-Allow-Origin': '*',
+      ...NO_CACHE_HEADERS
+    });
+    res.end(JSON.stringify({
+      status: 'ok',
+      buildId: devContext.currentBuildId,
+      server: 'liquid-dev'
+    }));
+    return;
+  }
+
+  // 3. Liquid Dev: GET /manifest.json
+  if (pathname === '/manifest.json') {
+    if (!verifyToken(req, pairingToken)) {
+      res.writeHead(401, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Access-Control-Allow-Origin': '*',
+        ...NO_CACHE_HEADERS
+      });
+      res.end(JSON.stringify({ error: 'Unauthorized: missing or invalid pairing token' }));
+      return;
+    }
+    const manifest = {
+      name: projectConfig?.appName || 'Liquid App',
+      version: projectConfig?.version || '1.0.0',
+      buildId: devContext.currentBuildId,
+      buildTime: new Date().toISOString(),
+      entry: 'bundle.js',
+      runtimeVersion: '1.0',
+      requiredPermissions: projectConfig?.permissions || ['android.permission.INTERNET'],
+      assets: []
+    };
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Access-Control-Allow-Origin': '*',
+      ...NO_CACHE_HEADERS
+    });
+    res.end(JSON.stringify(manifest, null, 2));
+    return;
+  }
+
+  // 4. Liquid Dev: GET /bundle.js
+  if (pathname === '/bundle.js') {
+    if (!verifyToken(req, pairingToken)) {
+      res.writeHead(401, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Access-Control-Allow-Origin': '*',
+        ...NO_CACHE_HEADERS
+      });
+      res.end(JSON.stringify({ error: 'Unauthorized: missing or invalid pairing token' }));
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': 'application/javascript; charset=utf-8',
+      'Access-Control-Allow-Origin': '*',
+      ...NO_CACHE_HEADERS
+    });
+    res.end(devContext.currentCompiledBundle || '');
+    return;
+  }
+
+  // 5. Liquid Dev: GET /bundle.js.map
+  if (pathname === '/bundle.js.map') {
+    if (!verifyToken(req, pairingToken)) {
+      res.writeHead(401, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Access-Control-Allow-Origin': '*',
+        ...NO_CACHE_HEADERS
+      });
+      res.end(JSON.stringify({ error: 'Unauthorized: missing or invalid pairing token' }));
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Access-Control-Allow-Origin': '*',
+      ...NO_CACHE_HEADERS
+    });
+    res.end(JSON.stringify({ version: 3, sources: [], mappings: '' }));
+    return;
+  }
+
+  // 6. Liquid Dev: GET /assets/*
+  if (pathname.startsWith('/assets/')) {
+    if (!verifyToken(req, pairingToken)) {
+      res.writeHead(401, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Access-Control-Allow-Origin': '*',
+        ...NO_CACHE_HEADERS
+      });
+      res.end(JSON.stringify({ error: 'Unauthorized: missing or invalid pairing token' }));
+      return;
+    }
+
+    const relAssetPath = pathname.slice('/assets/'.length);
+    if (relAssetPath.includes('\0') || relAssetPath.includes('..')) {
+      res.writeHead(403, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Access-Control-Allow-Origin': '*'
+      });
+      res.end('403 Forbidden: Invalid asset path');
+      return;
+    }
+
+    const candidates = [
+      path.resolve(rootDir, 'public', 'assets', relAssetPath),
+      path.resolve(rootDir, 'src', 'assets', relAssetPath),
+      path.resolve(rootDir, 'public', relAssetPath),
+      path.resolve(rootDir, 'assets', relAssetPath)
+    ];
+
+    let matchedFile = null;
+    const resolvedRoot = path.resolve(rootDir);
+    for (const c of candidates) {
+      if (!c.startsWith(resolvedRoot)) {
+        res.writeHead(403, {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Access-Control-Allow-Origin': '*'
+        });
+        res.end('403 Forbidden: Path traversal detected');
+        return;
+      }
+      if (fs.existsSync(c) && fs.statSync(c).isFile()) {
+        matchedFile = c;
+        break;
+      }
+    }
+
+    if (!matchedFile) {
+      res.writeHead(404, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Access-Control-Allow-Origin': '*'
+      });
+      res.end(`404 Not Found: /assets/${relAssetPath}`);
+      return;
+    }
+
+    const ext = path.extname(matchedFile).toLowerCase();
+    const mime = MIME_TYPES[ext] || 'application/octet-stream';
+    res.writeHead(200, {
+      'Content-Type': mime,
+      'Access-Control-Allow-Origin': '*',
+      ...NO_CACHE_HEADERS
+    });
+    fs.createReadStream(matchedFile).pipe(res);
+    return;
+  }
+
+  // 7. SSE HMR endpoint
   if (pathname === '/__liquid_hmr') {
     logRequest(req, { statusCode: 200 }, pathname, startTime);
     res.writeHead(200, {
@@ -537,11 +1027,17 @@ function serveJavaScript(filePath, res) {
 
 function resolvePackageDir(pkgName, rootDir) {
   const unscope = pkgName.replace(/^@[^/]+\//, '');
+
+  // Monorepo support: check sibling packages relative to liquid-cli first
+  const cliDir = path.dirname(new URL(import.meta.url).pathname);
+  const siblingPkg = path.resolve(cliDir, '../../', unscope);
+  if (fs.existsSync(siblingPkg)) return siblingPkg;
+
   let cur = rootDir;
   while (cur) {
-    let candidate = path.join(cur, 'node_modules', pkgName);
+    let candidate = path.join(cur, 'node_modules', `@mkdevofficial/${unscope}`);
     if (fs.existsSync(candidate)) return candidate;
-    candidate = path.join(cur, 'node_modules', `@mkdevofficial/${unscope}`);
+    candidate = path.join(cur, 'node_modules', pkgName);
     if (fs.existsSync(candidate)) return candidate;
     candidate = path.join(cur, 'node_modules', unscope);
     if (fs.existsSync(candidate)) return candidate;
@@ -550,16 +1046,11 @@ function resolvePackageDir(pkgName, rootDir) {
     cur = parent;
   }
 
-  // Monorepo support: check sibling packages relative to liquid-cli
-  const cliDir = path.dirname(new URL(import.meta.url).pathname);
-  const siblingPkg = path.resolve(cliDir, '../../', unscope);
-  if (fs.existsSync(siblingPkg)) return siblingPkg;
-
   // Fallback relative to cli node_modules
-  const fallback = path.resolve(cliDir, '../../..', 'node_modules', pkgName);
-  if (fs.existsSync(fallback)) return fallback;
   const fallbackScoped = path.resolve(cliDir, '../../..', 'node_modules', `@mkdevofficial/${unscope}`);
   if (fs.existsSync(fallbackScoped)) return fallbackScoped;
+  const fallback = path.resolve(cliDir, '../../..', 'node_modules', pkgName);
+  if (fs.existsSync(fallback)) return fallback;
   const fallbackUnscoped = path.resolve(cliDir, '../../..', 'node_modules', unscope);
   if (fs.existsSync(fallbackUnscoped)) return fallbackUnscoped;
 

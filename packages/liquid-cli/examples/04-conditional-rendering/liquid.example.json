@@ -1,0 +1,9 @@
+{
+  "id": "04-conditional-rendering",
+  "title": "Conditional Rendering",
+  "category": "Foundations",
+  "description": "Branching UI with if/else blocks, ternary operators, and dynamic show/hide.",
+  "keywords": ["conditionals", "if", "else", "branching"],
+  "platforms": ["web", "android"],
+  "difficulty": "beginner"
+}

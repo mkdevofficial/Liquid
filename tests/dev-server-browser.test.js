@@ -256,7 +256,7 @@ test('E2E Browser - standard scaffolded project renders visible content and is N
         assert.ok(appHtml.includes('app-container'), 'Rendered DOM must contain app-container');
         assert.ok(appHtml.includes('Counter'), 'Rendered DOM must contain Counter section');
         assert.ok(appHtml.includes('Todo List'), 'Rendered DOM must contain Todo List section');
-        assert.ok(appHtml.includes('standard-app'), 'Rendered DOM must contain app title');
+        assert.ok(appHtml.includes('Standard App') || appHtml.includes('standard-app'), 'Rendered DOM must contain app title');
 
         assert.strictEqual(browserExceptions.length, 0, 'Browser must have 0 uncaught exceptions');
       });

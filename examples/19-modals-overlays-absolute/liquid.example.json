@@ -1,0 +1,9 @@
+{
+  "id": "19-modals-overlays-absolute",
+  "title": "Modals, Toasts & Absolute Overlays",
+  "category": "Cross-Platform & Edge Cases",
+  "description": "Absolute positioning, backdrop scrims, modal dialogs, and temporary toast notification alerts.",
+  "keywords": ["modal", "overlay", "absolute", "toast", "scrim", "dialog"],
+  "platforms": ["web", "android"],
+  "difficulty": "advanced"
+}

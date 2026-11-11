@@ -1,0 +1,10 @@
+{
+  "appName": "Liquid Sample",
+  "packageId": "com.liquid.sample",
+  "version": "1.0.0",
+  "versionCode": 1,
+  "orientation": "portrait",
+  "permissions": [
+    "android.permission.INTERNET"
+  ]
+}

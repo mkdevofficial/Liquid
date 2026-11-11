@@ -4,6 +4,16 @@ import { analyze } from './analyzer.js';
 import { transformScopedCSS } from './css.js';
 import { generate } from './codegen.js';
 import { LiquidSyntaxError, formatExcerpt } from './errors.js';
+import {
+  parseScopedStyles,
+  parseCSSDeclarations,
+  normalizeDeclaration,
+  parseBoxShorthand,
+  parseSize,
+  parseColor,
+  hslToRgb,
+  NAMED_COLORS
+} from './style-normalizer.js';
 
 export { tokenize } from './tokenizer.js';
 export { parse } from './parser.js';
@@ -12,6 +22,16 @@ export { transformScopedCSS } from './css.js';
 export { generate } from './codegen.js';
 export { LiquidSyntaxError, formatExcerpt } from './errors.js';
 export { ERROR_CODES, getError, getAllErrors, searchErrors } from './error-codes.js';
+export {
+  parseScopedStyles,
+  parseCSSDeclarations,
+  normalizeDeclaration,
+  parseBoxShorthand,
+  parseSize,
+  parseColor,
+  hslToRgb,
+  NAMED_COLORS
+} from './style-normalizer.js';
 
 /**
  * Standalone Liquid compiler API.
@@ -19,7 +39,7 @@ export { ERROR_CODES, getError, getAllErrors, searchErrors } from './error-codes
  *
  * @param {string} source
  * @param {object} [options={}]
- * @returns {{ code: string, map: object, css: string, warnings: Array<object>, ast: object }}
+ * @returns {{ code: string, map: object, css: string, styles: object, warnings: Array<object>, ast: object }}
  */
 export function compile(source, options = {}) {
   const file = options.file || 'Component.liq';
@@ -33,11 +53,18 @@ export function compile(source, options = {}) {
   // 3. Analyze
   const analysis = analyze(ast, { file, ...options });
 
-  // 4. Scoped CSS
+  // 4. Scoped CSS and Normalized Style Objects
+  const diagnostics = [];
   const scopedCSS = transformScopedCSS(ast.styles.content, analysis.scopeAttr);
+  const normalizedStyles = parseScopedStyles(ast.styles.content, {
+    file,
+    baseLine: ast.styles.line || 1,
+    diagnostics,
+    ...options
+  });
 
   // 5. Code generation
-  const genResult = generate(ast, analysis, { file, ...options });
+  const genResult = generate(ast, analysis, { file, normalizedStyles, diagnostics, ...options });
 
   ast.scopeId = analysis.scopeId;
   ast.scopeAttr = analysis.scopeAttr;
@@ -45,8 +72,11 @@ export function compile(source, options = {}) {
   return {
     code: genResult.code,
     map: genResult.map,
+    lineMap: genResult.lineMap || {},
     css: scopedCSS,
+    styles: normalizedStyles,
     warnings: analysis.warnings,
+    diagnostics,
     ast,
     scopeId: analysis.scopeId,
     scopeAttr: analysis.scopeAttr

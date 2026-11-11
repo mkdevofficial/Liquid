@@ -13,11 +13,14 @@
 
 ### 1. Create a Project
 ```bash
-# Create a standard app with examples
-npx liquid create my-app
+# Create an app from one of 8 curated templates
+npx liquid create my-app --template shop
 
-# Or create a minimal starter app
-npx liquid create my-app --minimal
+# Or list all available templates
+npx liquid templates
+
+# Or explore 20 focused examples
+npx liquid examples
 ```
 
 ### 2. Run the Development Server
@@ -152,9 +155,12 @@ The `liquid` CLI comes with pure-JS commands designed for developer productivity
 
 | Command | Description |
 |---|---|
-| `liquid create <name>` | Scaffold a new project (`--minimal` for bare template) |
-| `liquid dev` | Start development server with instant rebuild and SSE hot reload |
-| `liquid build` | Build production bundle with scoped CSS extraction and minification |
+| `liquid create <name> [--template <id>]` | Scaffold a project from template (`starter`, `todo-pro`, `notes`, `chat`, `shop`, `weather`, `expense-tracker`, `arabic-app`) |
+| `liquid templates` | List all 8 available project templates (alias: `liquid create --list`) |
+| `liquid examples [id] [--copy]` | List or run 20 focused examples, or copy an example locally |
+| `liquid dev` | Start development server with instant rebuild, hot reload, and mobile deep linking |
+| `liquid build` | Build production web bundle with scoped CSS extraction and minification |
+| `liquid build android` | Build native Android APK with QuickJS bytecode compilation |
 | `liquid preview` | Serve the production build locally with SPA route fallback |
 | `liquid check` | Validate all `.liq` files across the project without building |
 
@@ -197,9 +203,13 @@ The framework is organized into decoupled, tree-shakeable packages:
 
 ## 📚 Documentation Links
 
+- [8 Complete Project Templates](docs/templates.md)
+- [20 Focused Examples Catalog](docs/examples.md)
 - [Complete Syntax Reference](docs/syntax.md)
 - [Reactivity & Signals Guide](docs/reactivity.md)
 - [Compiler Architecture & API](docs/compiler.md)
+- [Android Architecture & Runtime](docs/android.md)
+- [Liquid Dev (Expo-Go-style App)](docs/liquid-dev.md)
 - [Architectural Decisions (DECISIONS.md)](DECISIONS.md)
 
 ---

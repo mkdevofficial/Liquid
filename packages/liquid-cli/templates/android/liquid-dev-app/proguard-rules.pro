@@ -1,0 +1,2 @@
+-keep class com.liquid.runtime.** { *; }
+-keep class com.liquid.dev.** { *; }

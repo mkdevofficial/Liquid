@@ -1,0 +1,9 @@
+{
+  "id": "01-hello-components",
+  "title": "Hello Components",
+  "category": "Foundations",
+  "description": "Demonstrates component composition, defineProps with defaults, and slot projection.",
+  "keywords": ["components", "props", "slots", "composition"],
+  "platforms": ["web", "android"],
+  "difficulty": "beginner"
+}

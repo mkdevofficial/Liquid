@@ -15,6 +15,7 @@
     "bin",
     "src",
     "templates",
+    "examples",
     "guide-dist"
   ],
   "publishConfig": {

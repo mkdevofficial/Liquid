@@ -1,0 +1,9 @@
+{
+  "id": "16-rtl-i18n",
+  "title": "RTL & Internationalization",
+  "category": "Cross-Platform & Edge Cases",
+  "description": "Bidirectional layout mirroring, CSS logical properties, and dynamic multi-language switching.",
+  "keywords": ["rtl", "i18n", "direction", "logical-properties", "arabic"],
+  "platforms": ["web", "android"],
+  "difficulty": "advanced"
+}

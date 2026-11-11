@@ -1,0 +1,9 @@
+{
+  "id": "10-routing-params-query",
+  "title": "Routing, Params & Queries",
+  "category": "Forms & Flow",
+  "description": "Client-side and native routing with dynamic route parameters, query string parsing, and 404 fallbacks.",
+  "keywords": ["routing", "router", "params", "query", "navigation"],
+  "platforms": ["web", "android"],
+  "difficulty": "intermediate"
+}

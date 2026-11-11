@@ -1,0 +1,9 @@
+{
+  "id": "15-timers-animation-signals",
+  "title": "Timers & Signal Animations",
+  "category": "Advanced & Async",
+  "description": "Signal-driven visual animations, progressive countdowns, and interval timers.",
+  "keywords": ["animation", "signals", "timers", "progress", "intervals"],
+  "platforms": ["web", "android"],
+  "difficulty": "intermediate"
+}

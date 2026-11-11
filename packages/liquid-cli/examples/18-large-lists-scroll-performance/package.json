@@ -1,0 +1,13 @@
+{
+  "name": "example-18-large-lists-scroll-performance",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "liquid dev",
+    "build": "liquid build",
+    "test": "node --test test.js"
+  },
+  "dependencies": {
+    "@mkdevofficial/liquid": "^0.2.0"
+  }
+}

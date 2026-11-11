@@ -336,6 +336,7 @@ function tokenizeUILine(lineContent, line, colOffset, tokens, file, source) {
 
     // Two-way binding: $prop={sig} or $={sig}
     if (char === '$') {
+      const savedPos = pos;
       pos++;
       const bindStart = pos;
       while (pos < len && !/[\s=]/.test(lineContent[pos])) {
@@ -343,21 +344,23 @@ function tokenizeUILine(lineContent, line, colOffset, tokens, file, source) {
       }
       const prop = lineContent.slice(bindStart, pos) || 'value';
       skipSpaces();
-      let target = '';
-      if (pos < len && lineContent[pos] === '=') {
+      const isValidProp = prop === 'value' || /^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(prop);
+      if (isValidProp && pos < len && lineContent[pos] === '=' && lineContent[pos + 1] !== '=' && lineContent[pos + 1] !== '>') {
         pos++;
         skipSpaces();
         const tObj = readAttrValue();
-        target = tObj.value;
+        tokens.push({
+          type: TokenType.DIRECTIVE_BIND,
+          prop,
+          target: tObj.value,
+          line,
+          column: colOffset + bindStart - 1
+        });
+        continue;
+      } else {
+        // Not a two-way binding directive; rewind so it falls through to inline text
+        pos = savedPos;
       }
-      tokens.push({
-        type: TokenType.DIRECTIVE_BIND,
-        prop,
-        target,
-        line,
-        column: colOffset + bindStart - 1
-      });
-      continue;
     }
 
     // Check if this looks like an attribute: name="value", name={expr}, or boolean attr

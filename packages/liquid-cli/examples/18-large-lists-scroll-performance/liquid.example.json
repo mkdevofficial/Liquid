@@ -1,0 +1,9 @@
+{
+  "id": "18-large-lists-scroll-performance",
+  "title": "Large Lists & Scroll Performance",
+  "category": "Cross-Platform & Edge Cases",
+  "description": "High-performance rendering of 500+ list elements with chunked rendering and fast scrolling.",
+  "keywords": ["performance", "large-lists", "scrolling", "chunking", "virtualization"],
+  "platforms": ["web", "android"],
+  "difficulty": "advanced"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "09-shared-store",
+  "title": "Shared Store & Selectors",
+  "category": "Forms & Flow",
+  "description": "Centralized state management with createStore, reactive actions, and selectors across multiple components.",
+  "keywords": ["store", "createStore", "state", "selectors", "actions"],
+  "platforms": ["web", "android"],
+  "difficulty": "intermediate"
+}

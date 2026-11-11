@@ -1,0 +1,9 @@
+{
+  "id": "06-forms-binding",
+  "title": "Forms & Two-Way Binding",
+  "category": "Forms & Flow",
+  "description": "Two-way signal binding with $value on text inputs, textareas, checkboxes, and radio buttons.",
+  "keywords": ["forms", "binding", "$value", "inputs", "validation"],
+  "platforms": ["web", "android"],
+  "difficulty": "intermediate"
+}

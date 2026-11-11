@@ -1,0 +1,78 @@
+name: Build QuickJS JNI Binaries
+
+on:
+  push:
+    paths:
+      - 'packages/liquid-android-native/**'
+      - '.github/workflows/build-quickjs.yml'
+  workflow_dispatch:
+  release:
+    types: [created]
+
+jobs:
+  build-quickjs:
+    name: Build QuickJS JNI (${{ matrix.abi }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        abi: [arm64-v8a, armeabi-v7a]
+        include:
+          - abi: arm64-v8a
+            arch: aarch64-linux-android
+          - abi: armeabi-v7a
+            arch: armv7a-linux-androideabi
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26b
+          add-to-path: true
+
+      - name: Compile libliquid-quickjs.so via CMake
+        run: |
+          mkdir -p build-${{ matrix.abi }}
+          cd build-${{ matrix.abi }}
+          cmake ../packages/liquid-android-native \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=${{ matrix.abi }} \
+            -DANDROID_PLATFORM=android-24 \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build . --config Release --target liquid-quickjs
+          $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip -s libliquid-quickjs.so
+          ls -la libliquid-quickjs.so
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libliquid-quickjs-${{ matrix.abi }}
+          path: build-${{ matrix.abi }}/libliquid-quickjs.so
+
+  release-assets:
+    name: Publish Release Assets
+    needs: build-quickjs
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - name: Download arm64-v8a
+        uses: actions/download-artifact@v4
+        with:
+          name: libliquid-quickjs-arm64-v8a
+          path: ./libs/arm64-v8a
+
+      - name: Download armeabi-v7a
+        uses: actions/download-artifact@v4
+        with:
+          name: libliquid-quickjs-armeabi-v7a
+          path: ./libs/armeabi-v7a
+
+      - name: Create Tarball
+        run: |
+          tar -czvf liquid-quickjs-prebuilt.tar.gz -C libs .
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: liquid-quickjs-prebuilt.tar.gz

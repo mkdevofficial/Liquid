@@ -1,0 +1,9 @@
+{
+  "id": "14-flexbox-layouts",
+  "title": "Flexbox Layout Patterns",
+  "category": "Advanced & Async",
+  "description": "Comprehensive flexbox alignments: row, column, wrap, space-between, auto margins, and gap spacing.",
+  "keywords": ["flexbox", "layout", "space-between", "wrap", "gap", "auto-margins"],
+  "platforms": ["web", "android"],
+  "difficulty": "intermediate"
+}

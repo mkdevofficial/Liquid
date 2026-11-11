@@ -332,6 +332,8 @@ export function onDestroy(fn) {
   }
 }
 
+export const onCleanup = onDestroy;
+
 /**
  * Register a mount hook.
  *

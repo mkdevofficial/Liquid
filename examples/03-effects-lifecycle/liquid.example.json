@@ -1,0 +1,9 @@
+{
+  "id": "03-effects-lifecycle",
+  "title": "Effects & Lifecycle",
+  "category": "Foundations",
+  "description": "Component lifecycle management with effect, onMount, onCleanup, and interval timers.",
+  "keywords": ["effects", "lifecycle", "onMount", "onCleanup", "timers"],
+  "platforms": ["web", "android"],
+  "difficulty": "beginner"
+}

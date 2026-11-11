@@ -1,0 +1,9 @@
+{
+  "id": "20-error-handling-recovery",
+  "title": "Error Handling & Graceful Recovery",
+  "category": "Cross-Platform & Edge Cases",
+  "description": "Error boundary concepts, catching computation exceptions, fallback UI states, and recovery buttons.",
+  "keywords": ["errors", "recovery", "boundaries", "fallback", "resilience"],
+  "platforms": ["web", "android"],
+  "difficulty": "advanced"
+}

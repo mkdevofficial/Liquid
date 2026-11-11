@@ -1,0 +1,9 @@
+{
+  "id": "05-lists-each-keys",
+  "title": "Lists & Keyed Each",
+  "category": "Foundations",
+  "description": "Efficient list rendering with keyed each loops, item insertions, deletions, and reordering.",
+  "keywords": ["lists", "each", "keys", "reordering"],
+  "platforms": ["web", "android"],
+  "difficulty": "beginner"
+}

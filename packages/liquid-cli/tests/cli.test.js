@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createCommand } from '../src/create.js';
+import { createCommand, TEMPLATES } from '../src/create.js';
 import { checkCommand } from '../src/check.js';
 import { buildCommand } from '../src/build.js';
 import { guideCommand } from '../src/guide.js';
+import { runCLI } from '../src/index.js';
+import { examplesCommand, loadAllExamples } from '../src/examples.js';
 import { getNetworkUrls, printServerUrls } from '../src/network.js';
 import { shouldUseEmoji, formatBanner } from '../src/banner.js';
 
@@ -165,5 +167,67 @@ test('CLI - guide command with --play flag redirects to /#/play gamified arena',
     assert.ok(html.includes('id="app"'));
   } finally {
     await new Promise(r => server.close(r));
+  }
+});
+
+test('CLI - TEMPLATES catalog contains 8 curated templates', () => {
+  assert.strictEqual(TEMPLATES.length, 8);
+  const ids = TEMPLATES.map(t => t.id).sort();
+  assert.deepStrictEqual(ids, [
+    'arabic-app',
+    'chat',
+    'expense-tracker',
+    'notes',
+    'shop',
+    'starter',
+    'todo-pro',
+    'weather'
+  ]);
+});
+
+test('CLI - create supports --template <id> with variable interpolation', async () => {
+  const projPath = path.join(TMP_DIR, 'my-shop-app');
+  await createCommand(projPath, { template: 'shop' });
+
+  assert.ok(fs.existsSync(path.join(projPath, 'package.json')));
+  assert.ok(fs.existsSync(path.join(projPath, 'src/App.liq')));
+  assert.ok(fs.existsSync(path.join(projPath, 'src/store.js')));
+  assert.ok(fs.existsSync(path.join(projPath, 'src/tokens.js')));
+
+  const pkgJson = JSON.parse(fs.readFileSync(path.join(projPath, 'package.json'), 'utf8'));
+  assert.strictEqual(pkgJson.name, 'my-shop-app');
+
+  const html = fs.readFileSync(path.join(projPath, 'index.html'), 'utf8');
+  assert.ok(html.includes('My Shop App'));
+});
+
+test('CLI - loadAllExamples returns 20 focused examples', () => {
+  const examples = loadAllExamples();
+  assert.strictEqual(examples.length, 20);
+  assert.strictEqual(examples[0].id, '01-hello-components');
+  assert.strictEqual(examples[19].id, '20-error-handling-recovery');
+});
+
+test('CLI - examplesCommand can copy an example locally via --copy', async () => {
+  const destDir = path.join(TMP_DIR, 'copied-ex01');
+  await examplesCommand('01', { copy: destDir });
+
+  assert.ok(fs.existsSync(path.join(destDir, 'liquid.example.json')));
+  assert.ok(fs.existsSync(path.join(destDir, 'src/App.liq')));
+  assert.ok(fs.existsSync(path.join(destDir, 'README.md')));
+});
+
+test('CLI - runCLI handles templates and examples list commands cleanly', async () => {
+  const logs = [];
+  const origLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+  try {
+    await runCLI(['templates']);
+    await runCLI(['examples']);
+    const fullLog = logs.join('\n');
+    assert.ok(fullLog.includes('Available Liquid Project Templates'));
+    assert.ok(fullLog.includes('Available Liquid Examples'));
+  } finally {
+    console.log = origLog;
   }
 });

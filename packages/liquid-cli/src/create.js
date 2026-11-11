@@ -1,6 +1,56 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { printBanner } from './banner.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export const TEMPLATES = [
+  { id: 'starter', name: 'Starter', description: 'Minimal blank project with router, store, tokens, and 2 routes', category: 'Foundations' },
+  { id: 'todo-pro', name: 'Todo Pro', description: 'Full todo app with search, filters, priorities, and persistence', category: 'Productivity' },
+  { id: 'notes', name: 'Notes', description: 'Notes app with list/detail/editor, search, tags, and persistence', category: 'Productivity' },
+  { id: 'chat', name: 'Chat', description: 'Messaging app with bubbles, auto-reply bot, and timestamps', category: 'Communication' },
+  { id: 'shop', name: 'Shop', description: 'E-commerce storefront with cart drawer, totals, and checkout validation', category: 'E-Commerce' },
+  { id: 'weather', name: 'Weather', description: 'Live public API fetch, offline fallback, and C/F unit switch', category: 'Data & Utilities' },
+  { id: 'expense-tracker', name: 'Expense Tracker', description: 'Monthly budgeting with view-based bar charts and category breakdown', category: 'Finance' },
+  { id: 'arabic-app', name: 'Arabic App (RTL)', description: 'Arabic-first application with bidirectional layout and language switch', category: 'Internationalization' }
+];
+
+export function listTemplates() {
+  console.log('\n  \x1b[1;36mAvailable Liquid Project Templates:\x1b[0m\n');
+  for (const t of TEMPLATES) {
+    console.log(`  \x1b[1;32m${t.id.padEnd(18)}\x1b[0m \x1b[90m[${t.category.padEnd(18)}]\x1b[0m ${t.description}`);
+  }
+  console.log('\n  Usage:');
+  console.log('    \x1b[36mliquid create <project-name> --template <template-id>\x1b[0m\n');
+}
+
+function copyTemplateDir(src, dest, vars = {}) {
+  if (!fs.existsSync(src)) return;
+  fs.mkdirSync(dest, { recursive: true });
+
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+
+    if (entry.isDirectory()) {
+      copyTemplateDir(srcPath, destPath, vars);
+    } else {
+      let content = fs.readFileSync(srcPath);
+      if (/\.(js|json|html|md|liq|css|txt|svg)$/.test(entry.name)) {
+        let text = content.toString('utf8');
+        for (const [k, v] of Object.entries(vars)) {
+          text = text.replaceAll(`{{${k}}}`, v);
+        }
+        fs.writeFileSync(destPath, text, 'utf8');
+      } else {
+        fs.writeFileSync(destPath, content);
+      }
+    }
+  }
+}
 
 /**
  * Scaffold a new Liquid project from a template.
@@ -8,9 +58,15 @@ import { printBanner } from './banner.js';
 export async function createCommand(projectName, options = {}) {
   printBanner('create');
 
+  if (options.list || projectName === '--list' || projectName === '-l') {
+    listTemplates();
+    return;
+  }
+
   if (!projectName) {
     console.error('  \x1b[31mError: Please specify the project name:\x1b[0m');
-    console.error('    liquid create <my-app> [--minimal]\n');
+    console.error('    liquid create <my-app> [--template <id> | --minimal | --list]\n');
+    listTemplates();
     process.exitCode = 1;
     return;
   }
@@ -24,6 +80,40 @@ export async function createCommand(projectName, options = {}) {
 
   const isMinimal = Boolean(options.minimal);
   const pkgName = path.basename(targetDir).replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase() || 'liquid-app';
+  const cleanAppName = path.basename(targetDir).replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+  // Handle explicit template
+  if (options.template) {
+    const templateId = String(options.template).toLowerCase().trim();
+    const found = TEMPLATES.find(t => t.id === templateId);
+    if (!found) {
+      console.error(`  \x1b[31mError: Unknown template '${options.template}'.\x1b[0m\n`);
+      listTemplates();
+      process.exitCode = 1;
+      return;
+    }
+
+    const templateDir = path.resolve(__dirname, '../templates/projects', templateId);
+    if (!fs.existsSync(templateDir)) {
+      console.error(`  \x1b[31mError: Template directory not found at ${templateDir}\x1b[0m\n`);
+      process.exitCode = 1;
+      return;
+    }
+
+    console.log(`  Scaffolding \x1b[1;32m${found.name}\x1b[0m project in \x1b[36m${projectName}\x1b[0m...\n`);
+    copyTemplateDir(templateDir, targetDir, {
+      APP_NAME: cleanAppName,
+      PACKAGE_NAME: pkgName
+    });
+
+    console.log(`  \x1b[32m✔ Project '${projectName}' created successfully from template '${found.id}'!\x1b[0m\n`);
+    console.log(`  Next steps:`);
+    console.log(`    \x1b[36mcd ${projectName}\x1b[0m`);
+    console.log(`    \x1b[36mnpm run dev\x1b[0m\n`);
+    return;
+  }
+
+  // Fallback: Standard or Minimal scaffolding (backward-compatible)
   console.log(`  Scaffolding ${isMinimal ? 'minimal' : 'standard'} project in \x1b[36m${projectName}\x1b[0m...\n`);
 
   fs.mkdirSync(path.join(targetDir, 'src/components'), { recursive: true });
@@ -60,7 +150,7 @@ export async function createCommand(projectName, options = {}) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${pkgName} — Liquid 🫟</title>
+    <title>${cleanAppName} — Liquid 🫟</title>
   </head>
   <body>
     <div id="app"></div>
@@ -228,7 +318,7 @@ function removeTodo(id) {
 
 --- ui
 div.app-container
-  Header title="${projectName}"
+  Header title="${cleanAppName}"
     span.badge Ready to build
 
   div.card
@@ -253,7 +343,7 @@ div.app-container
   }
 
   // 6. README.md
-  const readmeContent = `# ${projectName} 🫟
+  const readmeContent = `# ${cleanAppName} 🫟
 
 Built with [Liquid](https://github.com), the ultra-concise frontend framework for the web.
 

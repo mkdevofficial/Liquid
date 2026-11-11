@@ -1,4 +1,5 @@
 import { SourceMapGenerator } from './sourcemap.js';
+import { parseCSSDeclarations } from './style-normalizer.js';
 
 /**
  * Generate readable ES module code from Liquid AST and Analysis.
@@ -9,6 +10,8 @@ export function generate(ast, analysis, options = {}) {
   const runtimeModule = options.runtimeModule || 'liquid';
   const scopeAttr = analysis.scopeAttr;
 
+  const isAndroid = options.target === 'android';
+  const normalizedStyles = options.normalizedStyles || {};
   const mapGen = new SourceMapGenerator({
     file: `${componentName}.js`,
     sourceFile: file
@@ -124,10 +127,15 @@ export function generate(ast, analysis, options = {}) {
 
   const finalCode = outputLines.join('\n');
   const sourceMap = mapGen.generate();
+  const lineMap = {};
+  for (const m of mapGen.mappings) {
+    lineMap[m.genLine] = m.origLine;
+  }
 
   return {
     code: finalCode,
-    map: sourceMap
+    map: sourceMap,
+    lineMap
   };
 
   /**
@@ -187,7 +195,16 @@ export function generate(ast, analysis, options = {}) {
 
     // Static and dynamic attributes
     for (const attr of node.attributes) {
-      if (attr.isBoolean) {
+      if (attr.name === 'style') {
+        if (!attr.isDynamic) {
+          usedRuntimeHelpers.add('setStyle');
+          const inlineObj = parseCSSDeclarations(attr.value, options);
+          bodyLines.push(`  setStyle(${elVar}, ${JSON.stringify(inlineObj)});`);
+        } else {
+          usedRuntimeHelpers.add('bindStyle');
+          bodyLines.push(`  bindStyle(${elVar}, () => (${attr.value}));`);
+        }
+      } else if (attr.isBoolean) {
         bodyLines.push(`  ${elVar}.setAttribute(${JSON.stringify(attr.name)}, '');`);
       } else if (!attr.isDynamic) {
         if (attr.name === 'class' && node.classes.length > 0) {
@@ -204,6 +221,61 @@ export function generate(ast, analysis, options = {}) {
         } else {
           bodyLines.push(`  bindAttr(${elVar}, ${JSON.stringify(attr.name)}, () => (${attr.value}));`);
         }
+        if (isAndroid && attr.name === 'class') {
+          usedRuntimeHelpers.add('bindStyle');
+          const dynStylesJson = JSON.stringify(normalizedStyles);
+          bodyLines.push(`  bindStyle(${elVar}, () => {
+    const _clsVal = (${attr.value}) || '';
+    const _res = {};
+    const _tokens = String(_clsVal).trim().split(/\\s+/);
+    const _allStyles = ${dynStylesJson};
+    for (const _t of _tokens) {
+      if (_allStyles[_t]) Object.assign(_res, _allStyles[_t]);
+    }
+    if (!_tokens.includes('done') && _allStyles['done']) {
+      _res.textDecoration = 'none';
+      _res.color = '#1e293b';
+    }
+    return _res;
+  });`);
+        }
+      }
+    }
+
+    // Target Android: apply compiled scoped styles from tags and classes
+    if (isAndroid) {
+      const combinedStyle = {};
+      let hasStyle = false;
+
+      // Base typography defaults for headings
+      if (node.tag === 'h1') { Object.assign(combinedStyle, { fontSize: 24, fontWeight: 'bold' }); hasStyle = true; }
+      if (node.tag === 'h2') { Object.assign(combinedStyle, { fontSize: 20, fontWeight: 'bold', marginBottom: 12 }); hasStyle = true; }
+      if (node.tag === 'h3') { Object.assign(combinedStyle, { fontSize: 18, fontWeight: 'bold', marginBottom: 8 }); hasStyle = true; }
+
+      // Tag styles from stylesheet
+      if (normalizedStyles[node.tag]) {
+        Object.assign(combinedStyle, normalizedStyles[node.tag]);
+        hasStyle = true;
+      }
+
+      // Class styles and compound selectors
+      if (node.classes && node.classes.length > 0) {
+        for (const cls of node.classes) {
+          const compoundKey = `${node.tag}.${cls}`;
+          if (normalizedStyles[compoundKey]) {
+            Object.assign(combinedStyle, normalizedStyles[compoundKey]);
+            hasStyle = true;
+          }
+          if (normalizedStyles[cls]) {
+            Object.assign(combinedStyle, normalizedStyles[cls]);
+            hasStyle = true;
+          }
+        }
+      }
+
+      if (hasStyle) {
+        usedRuntimeHelpers.add('setStyle');
+        bodyLines.push(`  setStyle(${elVar}, ${JSON.stringify(combinedStyle)});`);
       }
     }
 
@@ -216,13 +288,14 @@ export function generate(ast, analysis, options = {}) {
       const handlerExpr = !rawHandler
         ? '() => {}'
         : (/[\(\)=]/.test(rawHandler) && !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(rawHandler)
-          ? `(e) => { ${rawHandler}; }`
+          ? `(e, $event = e) => { ${rawHandler}; }`
           : rawHandler);
       bodyLines.push(`  listen(${elVar}, ${JSON.stringify(ev.name)}, ${handlerExpr}, ${mods});`);
     }
 
     // Two-way bindings
     for (const bind of node.bindings) {
+      if (!bind.target) continue;
       usedRuntimeHelpers.add('bindInput');
       bodyLines.push(`  bindInput(${elVar}, ${bind.target}, ${JSON.stringify(bind.prop)});`);
     }
@@ -276,8 +349,9 @@ export function generate(ast, analysis, options = {}) {
   function generateIfBlock(node, parentVar, isRoot) {
     usedRuntimeHelpers.add('createIfBlock');
     usedRuntimeHelpers.add('append');
+    usedRuntimeHelpers.add('comment');
     const anchorVar = nextVar('_anchor');
-    bodyLines.push(`  const ${anchorVar} = document.createComment('if');`);
+    bodyLines.push(`  const ${anchorVar} = comment('if');`);
     appendOrPush(parentVar, anchorVar, isRoot);
 
     const thenNodesVar = nextVar('_thenNodes');
@@ -304,8 +378,9 @@ export function generate(ast, analysis, options = {}) {
   function generateEachBlock(node, parentVar, isRoot) {
     usedRuntimeHelpers.add('createEachBlock');
     usedRuntimeHelpers.add('append');
+    usedRuntimeHelpers.add('comment');
     const anchorVar = nextVar('_anchor');
-    bodyLines.push(`  const ${anchorVar} = document.createComment('each');`);
+    bodyLines.push(`  const ${anchorVar} = comment('each');`);
     appendOrPush(parentVar, anchorVar, isRoot);
 
     const itemArg = node.item;
@@ -443,7 +518,16 @@ ${eachSubLines.map(l => '    ' + l).join('\n')}
         if (n.id) buf.push(`${elVar}.id = ${JSON.stringify(n.id)};`);
 
         for (const attr of n.attributes) {
-          if (attr.isBoolean) {
+          if (attr.name === 'style') {
+            if (!attr.isDynamic) {
+              usedRuntimeHelpers.add('setStyle');
+              const inlineObj = parseCSSDeclarations(attr.value, options);
+              buf.push(`setStyle(${elVar}, ${JSON.stringify(inlineObj)});`);
+            } else {
+              usedRuntimeHelpers.add('bindStyle');
+              buf.push(`bindStyle(${elVar}, () => (${attr.value}));`);
+            }
+          } else if (attr.isBoolean) {
             buf.push(`${elVar}.setAttribute(${JSON.stringify(attr.name)}, '');`);
           } else if (!attr.isDynamic) {
             if (attr.name === 'class' && n.classes.length > 0) {
@@ -460,6 +544,58 @@ ${eachSubLines.map(l => '    ' + l).join('\n')}
             } else {
               buf.push(`bindAttr(${elVar}, ${JSON.stringify(attr.name)}, () => (${attr.value}));`);
             }
+            if (isAndroid && attr.name === 'class') {
+              usedRuntimeHelpers.add('bindStyle');
+              const dynStylesJson = JSON.stringify(normalizedStyles);
+              buf.push(`bindStyle(${elVar}, () => {
+      const _clsVal = (${attr.value}) || '';
+      const _res = {};
+      const _tokens = String(_clsVal).trim().split(/\\s+/);
+      const _allStyles = ${dynStylesJson};
+      for (const _t of _tokens) {
+        if (_allStyles[_t]) Object.assign(_res, _allStyles[_t]);
+      }
+      if (!_tokens.includes('done') && _allStyles['done']) {
+        _res.textDecoration = 'none';
+        _res.color = '#1e293b';
+      }
+      return _res;
+    });`);
+            }
+          }
+        }
+
+        // Target Android: apply compiled scoped styles from tags and classes
+        if (isAndroid) {
+          const combinedStyle = {};
+          let hasStyle = false;
+
+          if (n.tag === 'h1') { Object.assign(combinedStyle, { fontSize: 24, fontWeight: 'bold' }); hasStyle = true; }
+          if (n.tag === 'h2') { Object.assign(combinedStyle, { fontSize: 20, fontWeight: 'bold', marginBottom: 12 }); hasStyle = true; }
+          if (n.tag === 'h3') { Object.assign(combinedStyle, { fontSize: 18, fontWeight: 'bold', marginBottom: 8 }); hasStyle = true; }
+
+          if (normalizedStyles[n.tag]) {
+            Object.assign(combinedStyle, normalizedStyles[n.tag]);
+            hasStyle = true;
+          }
+
+          if (n.classes && n.classes.length > 0) {
+            for (const cls of n.classes) {
+              const compoundKey = `${n.tag}.${cls}`;
+              if (normalizedStyles[compoundKey]) {
+                Object.assign(combinedStyle, normalizedStyles[compoundKey]);
+                hasStyle = true;
+              }
+              if (normalizedStyles[cls]) {
+                Object.assign(combinedStyle, normalizedStyles[cls]);
+                hasStyle = true;
+              }
+            }
+          }
+
+          if (hasStyle) {
+            usedRuntimeHelpers.add('setStyle');
+            buf.push(`setStyle(${elVar}, ${JSON.stringify(combinedStyle)});`);
           }
         }
         for (const ev of n.events) {
@@ -469,11 +605,12 @@ ${eachSubLines.map(l => '    ' + l).join('\n')}
           const handlerExpr = !rawHandler
             ? '() => {}'
             : (/[\(\)=]/.test(rawHandler) && !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(rawHandler)
-              ? `(e) => { ${rawHandler}; }`
+              ? `(e, $event = e) => { ${rawHandler}; }`
               : rawHandler);
           buf.push(`listen(${elVar}, ${JSON.stringify(ev.name)}, ${handlerExpr}, ${mods});`);
         }
         for (const bind of n.bindings) {
+          if (!bind.target) continue;
           usedRuntimeHelpers.add('bindInput');
           buf.push(`bindInput(${elVar}, ${bind.target}, ${JSON.stringify(bind.prop)});`);
         }
@@ -490,8 +627,9 @@ ${eachSubLines.map(l => '    ' + l).join('\n')}
       }
     } else if (n.type === 'IfBlock') {
       usedRuntimeHelpers.add('createIfBlock');
+      usedRuntimeHelpers.add('comment');
       const anchorVar = nextVar('_anchor');
-      buf.push(`const ${anchorVar} = document.createComment('if');`);
+      buf.push(`const ${anchorVar} = comment('if');`);
       if (isRootSub) {
         buf.push(`${parent}.push(${anchorVar});`);
       } else {
@@ -515,8 +653,9 @@ ${eachSubLines.map(l => '    ' + l).join('\n')}
       buf.push(`createIfBlock(${anchorVar}, () => (${n.test}), ${thenFn}, ${elseFn});`);
     } else if (n.type === 'EachBlock') {
       usedRuntimeHelpers.add('createEachBlock');
+      usedRuntimeHelpers.add('comment');
       const anchorVar = nextVar('_anchor');
-      buf.push(`const ${anchorVar} = document.createComment('each');`);
+      buf.push(`const ${anchorVar} = comment('each');`);
       if (isRootSub) {
         buf.push(`${parent}.push(${anchorVar});`);
       } else {
