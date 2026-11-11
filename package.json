@@ -14,7 +14,7 @@
     "check": "node packages/liquid-cli/bin/liquid.js check",
     "verify:android": "node scripts/verify-android-parity.js",
     "verify:all-templates": "node scripts/verify-all-templates.js",
-    "publish:all": "npm publish --workspaces --access public"
+    "publish:all": "npm publish --workspace=packages/* --access public"
   },
   "devDependencies": {
     "acorn": "^8.19.0",
